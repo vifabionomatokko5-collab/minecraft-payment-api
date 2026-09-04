@@ -9,11 +9,12 @@ const client = new Client({
 
 const API_URL = process.env.API_URL || 'http://localhost:3000';
 
-// ========== BANCO DE DADOS LOCAL ==========
+// ========== BANCO DE DADOS LOCAL (para salvar o canal) ==========
 const guildSettings = new Map();
 
 // ========== COMANDOS ==========
 const commands = [
+  // Comando de compra (público)
   {
     name: 'comprar',
     description: 'Compre itens para o servidor Minecraft',
@@ -38,6 +39,7 @@ const commands = [
       }
     ]
   },
+  // Comando de admin (apenas para ADMINS)
   {
     name: 'set-loja',
     description: 'Define o canal onde os pedidos serão enviados (APENAS ADM)',
@@ -45,7 +47,7 @@ const commands = [
       {
         name: 'canal',
         description: 'Canal onde os pedidos serão enviados',
-        type: 7,
+        type: 7, // CHANNEL
         required: true
       }
     ],
@@ -66,38 +68,57 @@ client.on('interactionCreate', async (interaction) => {
 
   // ===== COMANDO: /set-loja =====
   if (interaction.commandName === 'set-loja') {
-    if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-      return interaction.reply({
-        content: '❌ Você não tem permissão para usar este comando!',
+    try {
+      // Verificar se é ADMIN
+      if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+        return interaction.reply({
+          content: '❌ Você não tem permissão para usar este comando!',
+          ephemeral: true
+        });
+      }
+
+      const channel = interaction.options.get('canal').channel;
+      
+      // Salvar no "banco"
+      guildSettings.set(interaction.guildId, channel.id);
+      
+      await interaction.reply({
+        content: `✅ Canal de loja definido como: <#${channel.id}>`,
+        ephemeral: true
+      });
+      
+      console.log(`📌 Canal de loja definido: ${channel.id} no servidor ${interaction.guildId}`);
+    } catch (error) {
+      console.error('❌ Erro no /set-loja:', error);
+      await interaction.reply({
+        content: '❌ Erro ao definir o canal. Tente novamente.',
         ephemeral: true
       });
     }
-
-    const channel = interaction.options.get('canal').channel;
-    guildSettings.set(interaction.guildId, channel.id);
-    
-    await interaction.reply({
-      content: `✅ Canal de loja definido como: <#${channel.id}>`,
-      ephemeral: true
-    });
   }
 
   // ===== COMANDO: /comprar =====
   if (interaction.commandName === 'comprar') {
-    await interaction.deferReply({ ephemeral: true });
-
-    const productId = interaction.options.get('produto')?.value;
-    const username = interaction.options.get('username')?.value;
-
     try {
+      await interaction.deferReply({ ephemeral: true });
+
+      const productId = interaction.options.get('produto')?.value;
+      const username = interaction.options.get('username')?.value;
+
+      console.log(`📝 Pedido: ${productId} para ${username} por ${interaction.user.tag}`);
+
+      // Chamar a API para criar pagamento
       const response = await axios.post(`${API_URL}/api/payment/create`, {
         userId: interaction.user.id,
         username,
         productId
       });
 
+      console.log('✅ Resposta da API:', response.data);
+
       const { qrCode, ticketUrl, amount, product, paymentId } = response.data;
 
+      // Embed do pagamento
       const embed = new EmbedBuilder()
         .setTitle('🛒 Pagamento PIX')
         .setDescription(`**Produto:** ${product}\n**Preço:** R$ ${amount.toFixed(2)}\n**Jogador:** ${username}`)
@@ -128,27 +149,36 @@ client.on('interactionCreate', async (interaction) => {
 
       // ===== ENVIAR PEDIDO PARA O CANAL DA LOJA =====
       const channelId = guildSettings.get(interaction.guildId);
+      console.log(`📌 Canal salvo: ${channelId}`);
+      
       if (channelId) {
-        const storeChannel = interaction.guild.channels.cache.get(channelId);
-        if (storeChannel) {
-          const orderEmbed = new EmbedBuilder()
-            .setTitle('🛒 NOVO PEDIDO')
-            .setDescription(`**Produto:** ${product}\n**Preço:** R$ ${amount.toFixed(2)}\n**Jogador:** ${username}\n**Status:** ⏳ Aguardando pagamento`)
-            .setColor('#ffaa00')
-            .setFooter({ text: `ID: ${paymentId} | Comprador: ${interaction.user.tag}` })
-            .setTimestamp();
+        try {
+          const storeChannel = await interaction.guild.channels.fetch(channelId);
+          if (storeChannel) {
+            const orderEmbed = new EmbedBuilder()
+              .setTitle('🛒 NOVO PEDIDO')
+              .setDescription(`**Produto:** ${product}\n**Preço:** R$ ${amount.toFixed(2)}\n**Jogador:** ${username}\n**Status:** ⏳ Aguardando pagamento`)
+              .setColor('#ffaa00')
+              .setFooter({ text: `ID: ${paymentId} | Comprador: ${interaction.user.tag}` })
+              .setTimestamp();
 
-          await storeChannel.send({
-            content: `🔔 Novo pedido de <@${interaction.user.id}>!`,
-            embeds: [orderEmbed]
-          });
+            await storeChannel.send({
+              content: `🔔 Novo pedido de <@${interaction.user.id}>!`,
+              embeds: [orderEmbed]
+            });
+            console.log('✅ Pedido enviado para o canal da loja');
+          }
+        } catch (error) {
+          console.error('❌ Erro ao enviar para o canal da loja:', error);
         }
+      } else {
+        console.log('⚠️ Nenhum canal de loja configurado para este servidor');
       }
 
       // ===== COLLECTOR: Verificar pagamento =====
       const collector = interaction.channel?.createMessageComponentCollector({
         filter: (i) => i.customId === `check_${paymentId}` && i.user.id === interaction.user.id,
-        time: 300000
+        time: 300000 // 5 minutos
       });
 
       collector?.on('collect', async (buttonInteraction) => {
@@ -164,20 +194,25 @@ client.on('interactionCreate', async (interaction) => {
             });
             await interaction.editReply({ components: [] });
 
+            // Atualizar pedido no canal da loja
             if (channelId) {
-              const storeChannel = interaction.guild.channels.cache.get(channelId);
-              if (storeChannel) {
-                const updatedEmbed = new EmbedBuilder()
-                  .setTitle('🛒 PEDIDO ENTREGUE')
-                  .setDescription(`**Produto:** ${product}\n**Preço:** R$ ${amount.toFixed(2)}\n**Jogador:** ${username}\n**Status:** ✅ Entregue!`)
-                  .setColor('#00ff88')
-                  .setFooter({ text: `ID: ${paymentId} | Comprador: ${interaction.user.tag}` })
-                  .setTimestamp();
+              try {
+                const storeChannel = await interaction.guild.channels.fetch(channelId);
+                if (storeChannel) {
+                  const updatedEmbed = new EmbedBuilder()
+                    .setTitle('🛒 PEDIDO ENTREGUE')
+                    .setDescription(`**Produto:** ${product}\n**Preço:** R$ ${amount.toFixed(2)}\n**Jogador:** ${username}\n**Status:** ✅ Entregue!`)
+                    .setColor('#00ff88')
+                    .setFooter({ text: `ID: ${paymentId} | Comprador: ${interaction.user.tag}` })
+                    .setTimestamp();
 
-                await storeChannel.send({
-                  content: `✅ Pedido de <@${interaction.user.id}> foi entregue!`,
-                  embeds: [updatedEmbed]
-                });
+                  await storeChannel.send({
+                    content: `✅ Pedido de <@${interaction.user.id}> foi entregue!`,
+                    embeds: [updatedEmbed]
+                  });
+                }
+              } catch (error) {
+                console.error('❌ Erro ao atualizar pedido:', error);
               }
             }
           } else if (status === 'pending') {
@@ -199,9 +234,25 @@ client.on('interactionCreate', async (interaction) => {
 
     } catch (error) {
       console.error('❌ Erro no comando comprar:', error);
-      await interaction.editReply('❌ Erro ao processar seu pedido. Tente novamente.');
+      
+      // Verificar se é erro de conexão com a API
+      if (error.code === 'ECONNREFUSED') {
+        await interaction.editReply({
+          content: '❌ Não foi possível conectar à API. Verifique se a API está rodando no Render.\n\nURL da API: ' + API_URL
+        });
+      } else if (error.response) {
+        // Erro da API
+        await interaction.editReply({
+          content: `❌ Erro da API: ${error.response.data?.error || 'Erro desconhecido'}`
+        });
+      } else {
+        await interaction.editReply({
+          content: '❌ Erro ao processar seu pedido. Tente novamente.'
+        });
+      }
     }
   }
 });
 
+// ========== LOGIN ==========
 client.login(process.env.DISCORD_TOKEN);
