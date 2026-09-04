@@ -1,14 +1,18 @@
-const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionsBitField } = require('discord.js');
 const axios = require('axios');
 const dotenv = require('dotenv');
 dotenv.config();
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages]
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
 });
 
 const API_URL = process.env.API_URL || 'http://localhost:3000';
 
+// ========== BANCO DE DADOS LOCAL ==========
+const guildSettings = new Map();
+
+// ========== COMANDOS ==========
 const commands = [
   {
     name: 'comprar',
@@ -20,6 +24,7 @@ const commands = [
         type: 3,
         required: true,
         choices: [
+          { name: '🧱 1 Terra (TESTE - R$0,01)', value: 'dirt' },
           { name: '🌟 Rank VIP', value: 'vip' },
           { name: '💎 64 Diamantes', value: 'diamonds' },
           { name: '🪙 32 Ouros', value: 'gold' }
@@ -32,90 +37,170 @@ const commands = [
         required: true
       }
     ]
+  },
+  {
+    name: 'set-loja',
+    description: 'Define o canal onde os pedidos serão enviados (APENAS ADM)',
+    options: [
+      {
+        name: 'canal',
+        description: 'Canal onde os pedidos serão enviados',
+        type: 7,
+        required: true
+      }
+    ],
+    default_member_permissions: String(PermissionsBitField.Flags.Administrator)
   }
 ];
 
+// ========== EVENTO: Bot pronto ==========
 client.once('ready', async () => {
   console.log(`🤖 Bot ${client.user?.tag} está online!`);
   await client.application?.commands.set(commands);
   console.log('✅ Comandos registrados!');
 });
 
+// ========== EVENTO: Interações ==========
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.isCommand()) return;
-  if (interaction.commandName !== 'comprar') return;
 
-  await interaction.deferReply({ ephemeral: true });
+  // ===== COMANDO: /set-loja =====
+  if (interaction.commandName === 'set-loja') {
+    if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+      return interaction.reply({
+        content: '❌ Você não tem permissão para usar este comando!',
+        ephemeral: true
+      });
+    }
 
-  const productId = interaction.options.get('produto')?.value;
-  const username = interaction.options.get('username')?.value;
-
-  try {
-    const response = await axios.post(`${API_URL}/api/payment/create`, {
-      userId: interaction.user.id,
-      username,
-      productId
+    const channel = interaction.options.get('canal').channel;
+    guildSettings.set(interaction.guildId, channel.id);
+    
+    await interaction.reply({
+      content: `✅ Canal de loja definido como: <#${channel.id}>`,
+      ephemeral: true
     });
+  }
 
-    const { qrCode, ticketUrl, amount, product, paymentId } = response.data;
+  // ===== COMANDO: /comprar =====
+  if (interaction.commandName === 'comprar') {
+    await interaction.deferReply({ ephemeral: true });
 
-    const embed = new EmbedBuilder()
-      .setTitle('🛒 Pagamento PIX')
-      .setDescription(`**Produto:** ${product}\n**Preço:** R$ ${amount.toFixed(2)}\n**Jogador:** ${username}`)
-      .setColor('#00ff88')
-      .setImage(qrCode)
-      .setFooter({ text: `ID: ${paymentId}` })
-      .setTimestamp();
+    const productId = interaction.options.get('produto')?.value;
+    const username = interaction.options.get('username')?.value;
 
-    const row = new ActionRowBuilder()
-      .addComponents(
-        new ButtonBuilder()
-          .setURL(ticketUrl)
-          .setLabel('📱 Copiar PIX')
-          .setStyle(ButtonStyle.Link)
-      )
-      .addComponents(
-        new ButtonBuilder()
-          .setCustomId(`check_${paymentId}`)
-          .setLabel('✅ Verificar Pagamento')
-          .setStyle(ButtonStyle.Success)
-      );
+    try {
+      const response = await axios.post(`${API_URL}/api/payment/create`, {
+        userId: interaction.user.id,
+        username,
+        productId
+      });
 
-    await interaction.editReply({
-      content: '📲 Escaneie o QR Code para pagar:',
-      embeds: [embed],
-      components: [row]
-    });
+      const { qrCode, ticketUrl, amount, product, paymentId } = response.data;
 
-    const collector = interaction.channel?.createMessageComponentCollector({
-      filter: (i) => i.customId === `check_${paymentId}` && i.user.id === interaction.user.id,
-      time: 300000
-    });
+      const embed = new EmbedBuilder()
+        .setTitle('🛒 Pagamento PIX')
+        .setDescription(`**Produto:** ${product}\n**Preço:** R$ ${amount.toFixed(2)}\n**Jogador:** ${username}`)
+        .setColor('#00ff88')
+        .setImage(qrCode)
+        .setFooter({ text: `ID: ${paymentId}` })
+        .setTimestamp();
 
-    collector?.on('collect', async (buttonInteraction) => {
-      await buttonInteraction.deferReply({ ephemeral: true });
-      const statusResponse = await axios.get(`${API_URL}/api/payment/${paymentId}`);
-      const { status } = statusResponse.data;
+      const row = new ActionRowBuilder()
+        .addComponents(
+          new ButtonBuilder()
+            .setURL(ticketUrl)
+            .setLabel('📱 Copiar PIX')
+            .setStyle(ButtonStyle.Link)
+        )
+        .addComponents(
+          new ButtonBuilder()
+            .setCustomId(`check_${paymentId}`)
+            .setLabel('✅ Verificar Pagamento')
+            .setStyle(ButtonStyle.Success)
+        );
 
-      if (status === 'delivered') {
-        await buttonInteraction.editReply({
-          content: '✅ **Pagamento confirmado!** O item foi entregue no Minecraft!'
-        });
-        await interaction.editReply({ components: [] });
-      } else if (status === 'pending') {
-        await buttonInteraction.editReply({
-          content: '⏳ Pagamento ainda não confirmado. Aguarde alguns instantes...'
-        });
-      } else {
-        await buttonInteraction.editReply({
-          content: '❌ Ocorreu um erro. Entre em contato com a administração.'
-        });
+      await interaction.editReply({
+        content: '📲 Escaneie o QR Code para pagar:',
+        embeds: [embed],
+        components: [row]
+      });
+
+      // ===== ENVIAR PEDIDO PARA O CANAL DA LOJA =====
+      const channelId = guildSettings.get(interaction.guildId);
+      if (channelId) {
+        const storeChannel = interaction.guild.channels.cache.get(channelId);
+        if (storeChannel) {
+          const orderEmbed = new EmbedBuilder()
+            .setTitle('🛒 NOVO PEDIDO')
+            .setDescription(`**Produto:** ${product}\n**Preço:** R$ ${amount.toFixed(2)}\n**Jogador:** ${username}\n**Status:** ⏳ Aguardando pagamento`)
+            .setColor('#ffaa00')
+            .setFooter({ text: `ID: ${paymentId} | Comprador: ${interaction.user.tag}` })
+            .setTimestamp();
+
+          await storeChannel.send({
+            content: `🔔 Novo pedido de <@${interaction.user.id}>!`,
+            embeds: [orderEmbed]
+          });
+        }
       }
-    });
 
-  } catch (error) {
-    console.error('❌ Erro:', error);
-    await interaction.editReply('❌ Erro ao processar seu pedido.');
+      // ===== COLLECTOR: Verificar pagamento =====
+      const collector = interaction.channel?.createMessageComponentCollector({
+        filter: (i) => i.customId === `check_${paymentId}` && i.user.id === interaction.user.id,
+        time: 300000
+      });
+
+      collector?.on('collect', async (buttonInteraction) => {
+        await buttonInteraction.deferReply({ ephemeral: true });
+        
+        try {
+          const statusResponse = await axios.get(`${API_URL}/api/payment/${paymentId}`);
+          const { status } = statusResponse.data;
+
+          if (status === 'delivered') {
+            await buttonInteraction.editReply({
+              content: '✅ **Pagamento confirmado!** O item foi entregue no Minecraft!'
+            });
+            await interaction.editReply({ components: [] });
+
+            if (channelId) {
+              const storeChannel = interaction.guild.channels.cache.get(channelId);
+              if (storeChannel) {
+                const updatedEmbed = new EmbedBuilder()
+                  .setTitle('🛒 PEDIDO ENTREGUE')
+                  .setDescription(`**Produto:** ${product}\n**Preço:** R$ ${amount.toFixed(2)}\n**Jogador:** ${username}\n**Status:** ✅ Entregue!`)
+                  .setColor('#00ff88')
+                  .setFooter({ text: `ID: ${paymentId} | Comprador: ${interaction.user.tag}` })
+                  .setTimestamp();
+
+                await storeChannel.send({
+                  content: `✅ Pedido de <@${interaction.user.id}> foi entregue!`,
+                  embeds: [updatedEmbed]
+                });
+              }
+            }
+          } else if (status === 'pending') {
+            await buttonInteraction.editReply({
+              content: '⏳ Pagamento ainda não confirmado. Aguarde alguns instantes...'
+            });
+          } else {
+            await buttonInteraction.editReply({
+              content: '❌ Ocorreu um erro. Entre em contato com a administração.'
+            });
+          }
+        } catch (error) {
+          console.error('❌ Erro ao verificar status:', error);
+          await buttonInteraction.editReply({
+            content: '❌ Erro ao verificar pagamento. Tente novamente.'
+          });
+        }
+      });
+
+    } catch (error) {
+      console.error('❌ Erro no comando comprar:', error);
+      await interaction.editReply('❌ Erro ao processar seu pedido. Tente novamente.');
+    }
   }
 });
 
