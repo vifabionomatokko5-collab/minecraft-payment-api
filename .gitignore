@@ -1,0 +1,28 @@
+# Node
+node_modules/
+dist/
+build/
+*.log
+.env
+.env.local
+.DS_Store
+
+# Database
+*.sqlite
+*.sqlite3
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+*.tmp
+
+# Java/Maven
+target/
+*.class
+*.jar
+!plugin-minecraft/target/*.jar
