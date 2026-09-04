@@ -84,12 +84,13 @@ app.post('/api/payment/create', async (req, res) => {
     const paymentId = uuidv4();
     const externalReference = `payment_${paymentId}`;
 
+    // CORRIGIDO: Usar email fixo válido
     const result = await payment.create({
       body: {
         transaction_amount: product.price,
         description: product.name,
         payment_method_id: 'pix',
-        payer: { email: `${userId}@discord.user` },
+        payer: { email: 'comprador@email.com' },
         external_reference: externalReference,
         notification_url: `${process.env.API_URL}/api/webhook/mercadopago`
       }
