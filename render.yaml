@@ -1,4 +1,5 @@
 services:
+  # ========== API ==========
   - type: web
     name: minecraft-payment-api
     runtime: node
@@ -21,7 +22,8 @@ services:
       - key: RCON_PASSWORD
         sync: false
 
-  - type: web
+  # ========== BOT DISCORD (Background Worker) ==========
+  - type: worker
     name: minecraft-discord-bot
     runtime: node
     plan: free
