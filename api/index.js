@@ -84,7 +84,6 @@ app.post('/api/payment/create', async (req, res) => {
     const paymentId = uuidv4();
     const externalReference = `payment_${paymentId}`;
 
-    // CORRIGIDO: Usar email fixo válido
     const result = await payment.create({
       body: {
         transaction_amount: product.price,
@@ -92,7 +91,7 @@ app.post('/api/payment/create', async (req, res) => {
         payment_method_id: 'pix',
         payer: { email: 'comprador@email.com' },
         external_reference: externalReference,
-        notification_url: `${process.env.API_URL}/api/webhook/mercadopago`
+        notification_url: 'https://minecraft-payment-api.onrender.com/api/webhook/mercadopago'
       }
     });
 
