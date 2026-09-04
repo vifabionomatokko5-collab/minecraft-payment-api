@@ -1,0 +1,46 @@
+services:
+  # ========== API ==========
+  - type: web
+    name: minecraft-payment-api
+    runtime: node
+    plan: free
+    buildCommand: cd api && npm install && npm run build
+    startCommand: cd api && npm start
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: NODE_ENV
+        value: production
+      - key: MERCADO_PAGO_ACCESS_TOKEN
+        sync: false  # Você vai colocar no Dashboard do Render
+      - key: API_URL
+        sync: false  # Será a URL gerada pelo Render
+      - key: MINECRAFT_HOST
+        sync: false
+      - key: RCON_PORT
+        value: 25575
+      - key: RCON_PASSWORD
+        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: minecraft-payment-db
+          property: connectionString
+
+  # ========== BOT DISCORD ==========
+  - type: worker
+    name: minecraft-discord-bot
+    runtime: node
+    plan: free
+    buildCommand: cd bot-discord && npm install && npm run build
+    startCommand: cd bot-discord && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DISCORD_TOKEN
+        sync: false
+      - key: API_URL
+        sync: false
+
+databases:
+  - name: minecraft-payment-db
+    plan: free
