@@ -7,14 +7,14 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
 });
 
-const API_URL = process.env.API_URL || 'http://localhost:3000';
+// URL FIXA DA API
+const API_URL = 'https://minecraft-payment-api.onrender.com';
 
-// ========== BANCO DE DADOS LOCAL (para salvar o canal) ==========
+// ========== BANCO DE DADOS LOCAL ==========
 const guildSettings = new Map();
 
 // ========== COMANDOS ==========
 const commands = [
-  // Comando de compra (público)
   {
     name: 'comprar',
     description: 'Compre itens para o servidor Minecraft',
@@ -39,7 +39,6 @@ const commands = [
       }
     ]
   },
-  // Comando de admin (apenas para ADMINS)
   {
     name: 'set-loja',
     description: 'Define o canal onde os pedidos serão enviados (APENAS ADM)',
@@ -47,7 +46,7 @@ const commands = [
       {
         name: 'canal',
         description: 'Canal onde os pedidos serão enviados',
-        type: 7, // CHANNEL
+        type: 7,
         required: true
       }
     ],
@@ -58,6 +57,7 @@ const commands = [
 // ========== EVENTO: Bot pronto ==========
 client.once('ready', async () => {
   console.log(`🤖 Bot ${client.user?.tag} está online!`);
+  console.log(`📡 API URL: ${API_URL}`);
   await client.application?.commands.set(commands);
   console.log('✅ Comandos registrados!');
 });
@@ -69,7 +69,6 @@ client.on('interactionCreate', async (interaction) => {
   // ===== COMANDO: /set-loja =====
   if (interaction.commandName === 'set-loja') {
     try {
-      // Verificar se é ADMIN
       if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
         return interaction.reply({
           content: '❌ Você não tem permissão para usar este comando!',
@@ -78,8 +77,6 @@ client.on('interactionCreate', async (interaction) => {
       }
 
       const channel = interaction.options.get('canal').channel;
-      
-      // Salvar no "banco"
       guildSettings.set(interaction.guildId, channel.id);
       
       await interaction.reply({
@@ -87,11 +84,11 @@ client.on('interactionCreate', async (interaction) => {
         ephemeral: true
       });
       
-      console.log(`📌 Canal de loja definido: ${channel.id} no servidor ${interaction.guildId}`);
+      console.log(`📌 Canal de loja definido: ${channel.id}`);
     } catch (error) {
       console.error('❌ Erro no /set-loja:', error);
       await interaction.reply({
-        content: '❌ Erro ao definir o canal. Tente novamente.',
+        content: '❌ Erro ao definir o canal.',
         ephemeral: true
       });
     }
@@ -106,6 +103,7 @@ client.on('interactionCreate', async (interaction) => {
       const username = interaction.options.get('username')?.value;
 
       console.log(`📝 Pedido: ${productId} para ${username} por ${interaction.user.tag}`);
+      console.log(`📡 Chamando API: ${API_URL}/api/payment/create`);
 
       // Chamar a API para criar pagamento
       const response = await axios.post(`${API_URL}/api/payment/create`, {
@@ -118,12 +116,17 @@ client.on('interactionCreate', async (interaction) => {
 
       const { qrCode, ticketUrl, amount, product, paymentId } = response.data;
 
+      // ========== CORREÇÃO DO QR CODE ==========
+      // Gerar URL da imagem do QR Code usando Google Charts
+      const qrCodeImageUrl = `https://chart.googleapis.com/chart?chs=300x300&cht=qr&chl=${encodeURIComponent(qrCode)}`;
+      console.log(`📱 QR Code URL: ${qrCodeImageUrl}`);
+
       // Embed do pagamento
       const embed = new EmbedBuilder()
         .setTitle('🛒 Pagamento PIX')
         .setDescription(`**Produto:** ${product}\n**Preço:** R$ ${amount.toFixed(2)}\n**Jogador:** ${username}`)
         .setColor('#00ff88')
-        .setImage(qrCode)
+        .setImage(qrCodeImageUrl) // Agora com URL válida!
         .setFooter({ text: `ID: ${paymentId}` })
         .setTimestamp();
 
@@ -149,8 +152,6 @@ client.on('interactionCreate', async (interaction) => {
 
       // ===== ENVIAR PEDIDO PARA O CANAL DA LOJA =====
       const channelId = guildSettings.get(interaction.guildId);
-      console.log(`📌 Canal salvo: ${channelId}`);
-      
       if (channelId) {
         try {
           const storeChannel = await interaction.guild.channels.fetch(channelId);
@@ -166,13 +167,10 @@ client.on('interactionCreate', async (interaction) => {
               content: `🔔 Novo pedido de <@${interaction.user.id}>!`,
               embeds: [orderEmbed]
             });
-            console.log('✅ Pedido enviado para o canal da loja');
           }
         } catch (error) {
-          console.error('❌ Erro ao enviar para o canal da loja:', error);
+          console.error('❌ Erro ao enviar para o canal:', error);
         }
-      } else {
-        console.log('⚠️ Nenhum canal de loja configurado para este servidor');
       }
 
       // ===== COLLECTOR: Verificar pagamento =====
@@ -235,13 +233,11 @@ client.on('interactionCreate', async (interaction) => {
     } catch (error) {
       console.error('❌ Erro no comando comprar:', error);
       
-      // Verificar se é erro de conexão com a API
       if (error.code === 'ECONNREFUSED') {
         await interaction.editReply({
-          content: '❌ Não foi possível conectar à API. Verifique se a API está rodando no Render.\n\nURL da API: ' + API_URL
+          content: `❌ Não foi possível conectar à API.\nURL: ${API_URL}`
         });
       } else if (error.response) {
-        // Erro da API
         await interaction.editReply({
           content: `❌ Erro da API: ${error.response.data?.error || 'Erro desconhecido'}`
         });
@@ -254,5 +250,4 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
-// ========== LOGIN ==========
 client.login(process.env.DISCORD_TOKEN);
