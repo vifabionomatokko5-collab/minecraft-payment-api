@@ -313,7 +313,7 @@ app.post('/api/purchases/deliver', authMiddleware, async (req, res) => {
   }
 });
 
-// ========== ROTAS DE CONFIGURAÇÃO DO SERVIDOR (NOVAS!) ==========
+// ========== ROTAS DE CONFIGURAÇÃO DO SERVIDOR ==========
 
 // ROTA: Salvar configuração do servidor
 app.post('/api/guild/settings', authMiddleware, async (req, res) => {
