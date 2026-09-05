@@ -49,18 +49,30 @@ app.use(express.json());
       )
     `);
     
-    // Tabela de produtos (COM CATEGORIA)
+    // Tabela de produtos
     await query(`
       CREATE TABLE IF NOT EXISTS products (
         id TEXT PRIMARY KEY,
         name TEXT UNIQUE,
         price REAL,
         command TEXT,
-        category TEXT,
         active INTEGER DEFAULT 1,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    
+    // Adicionar coluna category se não existir
+    const checkColumn = await query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name='products' AND column_name='category'
+    `);
+    
+    if (checkColumn.rows.length === 0) {
+      console.log('🔄 Adicionando coluna category...');
+      await query('ALTER TABLE products ADD COLUMN category TEXT');
+      console.log('✅ Coluna category adicionada!');
+    }
     
     // Tabela de configurações do servidor
     await query(`
