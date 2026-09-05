@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comprar - MinePay</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <header>
+        <h1>🛒 Pagamento</h1>
+        <a href="/" class="btn-back">← Voltar para a loja</a>
+    </header>
+
+    <main>
+        <div class="payment-container">
+            <div class="product-info">
+                <h2><%= product.name %></h2>
+                <p class="price">R$ <%= product.price.toFixed(2) %></p>
+            </div>
+
+            <form id="payment-form">
+                <div class="form-group">
+                    <label for="username">🎮 Seu nickname no Minecraft</label>
+                    <input type="text" id="username" placeholder="Ex: F4RINHA777" required>
+                </div>
+                <button type="submit" class="btn-pay">💰 Gerar PIX</button>
+            </form>
+
+            <div id="payment-result" style="display: none;">
+                <h3>📲 Escaneie o QR Code</h3>
+                <img id="qr-code" src="" alt="QR Code PIX">
+                
+                <p style="margin: 15px 0 5px;">Ou copie o código abaixo:</p>
+                <textarea id="pix-code" readonly></textarea>
+                
+                <button onclick="copiarPix()" class="btn-copy">📋 Copiar Código</button>
+                
+                <div id="payment-status" class="pending">⏳ Aguardando pagamento...</div>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <p>© 2026 MinePay - Todos os direitos reservados</p>
+    </footer>
+
+    <script>
+        document.getElementById('payment-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const username = document.getElementById('username').value.trim();
+            const productId = '<%= product.id %>';
+            
+            if (!username) {
+                alert('Por favor, digite seu nickname no Minecraft!');
+                return;
+            }
+            
+            const btn = document.querySelector('.btn-pay');
+            btn.textContent = '🔄 Gerando...';
+            btn.disabled = true;
+            
+            try {
+                const response = await fetch('/api/payment/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        userId: 'web_' + Date.now(),
+                        username: username,
+                        productId: productId
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    document.getElementById('payment-result').style.display = 'block';
+                    document.getElementById('qr-code').src = data.qrCode;
+                    document.getElementById('pix-code').value = data.qrCode;
+                    document.getElementById('payment-status').textContent = '⏳ Aguardando pagamento...';
+                    document.getElementById('payment-status').className = 'pending';
+                    
+                    let attempts = 0;
+                    const maxAttempts = 120;
+                    
+                    const interval = setInterval(async () => {
+                        attempts++;
+                        
+                        try {
+                            const statusResponse = await fetch('/api/payment/' + data.paymentId);
+                            const statusData = await statusResponse.json();
+                            
+                            if (statusData.status === 'delivered') {
+                                document.getElementById('payment-status').textContent = '✅ Pagamento confirmado! Item entregue no Minecraft!';
+                                document.getElementById('payment-status').className = 'delivered';
+                                clearInterval(interval);
+                                document.getElementById('payment-form').style.display = 'none';
+                            } else if (attempts >= maxAttempts) {
+                                document.getElementById('payment-status').textContent = '⏰ Tempo esgotado. Se pagou, aguarde alguns minutos.';
+                                document.getElementById('payment-status').className = 'error';
+                                clearInterval(interval);
+                            } else {
+                                document.getElementById('payment-status').textContent = `⏳ Aguardando pagamento... (${Math.round(attempts * 5 / 60)}min)`;
+                            }
+                        } catch (error) {
+                            console.error('Erro ao verificar status:', error);
+                        }
+                    }, 5000);
+                } else {
+                    alert('❌ Erro ao gerar pagamento: ' + (data.error || 'Tente novamente'));
+                }
+            } catch (error) {
+                console.error('Erro:', error);
+                alert('❌ Erro ao processar seu pedido. Tente novamente.');
+            } finally {
+                btn.textContent = '💰 Gerar PIX';
+                btn.disabled = false;
+            }
+        });
+        
+        async function copiarPix() {
+            const pix = document.getElementById('pix-code').value;
+            try {
+                await navigator.clipboard.writeText(pix);
+                const btn = document.querySelector('.btn-copy');
+                btn.textContent = '✅ Copiado!';
+                setTimeout(() => btn.textContent = '📋 Copiar Código', 3000);
+            } catch (error) {
+                alert('Selecione o código e copie manualmente.');
+            }
+        }
+    </script>
+</body>
+</html>
