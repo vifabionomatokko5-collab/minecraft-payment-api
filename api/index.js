@@ -205,6 +205,28 @@ app.delete('/api/products/clear', authMiddleware, async (req, res) => {
   }
 });
 
+// ========== CHECKOUT ==========
+app.get('/checkout', (req, res) => {
+  res.render('checkout');
+});
+
+// ========== BUSCAR PRODUTO POR ID ==========
+app.get('/api/products/:id', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await query('SELECT * FROM products WHERE id = $1 AND active = 1', [id]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Produto não encontrado' });
+    }
+    
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('❌ Erro ao buscar produto:', error);
+    res.status(500).json({ error: 'Erro ao buscar produto' });
+  }
+});
+
 // ========== INICIAR SERVIDOR ==========
 app.listen(PORT, '0.0.0.0', async () => {
   console.log(`🚀 API + Site rodando em http://0.0.0.0:${PORT}`);
