@@ -193,6 +193,18 @@ app.post('/api/purchases/deliver', authMiddleware, async (req, res) => {
   }
 });
 
+// ========== DELETAR TODOS OS PRODUTOS ==========
+app.delete('/api/products/clear', authMiddleware, async (req, res) => {
+  try {
+    await query('DELETE FROM products');
+    console.log('✅ Todos os produtos foram deletados');
+    res.json({ success: true, message: 'Todos os produtos foram deletados' });
+  } catch (error) {
+    console.error('❌ Erro ao deletar produtos:', error);
+    res.status(500).json({ error: 'Erro ao deletar produtos' });
+  }
+});
+
 // ========== INICIAR SERVIDOR ==========
 app.listen(PORT, '0.0.0.0', async () => {
   console.log(`🚀 API + Site rodando em http://0.0.0.0:${PORT}`);
