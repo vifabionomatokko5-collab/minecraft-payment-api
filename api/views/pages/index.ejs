@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MinePay - Loja Minecraft</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <header>
+        <h1>🏪 MinePay</h1>
+        <p>Compre itens para o servidor Minecraft de forma rápida e segura!</p>
+    </header>
+
+    <main>
+        <section>
+            <h2>🛒 Produtos Disponíveis</h2>
+            
+            <% if (products && products.length > 0) { %>
+                <div class="products-grid">
+                    <% products.forEach(product => { %>
+                        <div class="product-card">
+                            <h3><%= product.name %></h3>
+                            <p class="price">R$ <%= product.price.toFixed(2) %></p>
+                            <a href="/comprar/<%= product.id %>" class="btn-buy">Comprar</a>
+                        </div>
+                    <% }) %>
+                </div>
+            <% } else { %>
+                <p style="text-align: center; color: #666; margin-top: 40px;">
+                    ⚠️ Nenhum produto disponível no momento. Volte em breve!
+                </p>
+            <% } %>
+        </section>
+    </main>
+
+    <footer>
+        <p>© 2026 MinePay - Todos os direitos reservados</p>
+    </footer>
+</body>
+</html>
