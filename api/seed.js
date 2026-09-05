@@ -9,12 +9,12 @@ const pool = new Pool({
 });
 
 const products = [
-  // ========== RANKS ==========
-  { name: '🗡️ Rank Knight', price: 9.90, command: 'lp user {username} parent add knight', category: 'Ranks' },
-  { name: '🏰 Rank Lord', price: 14.90, command: 'lp user {username} parent add lord', category: 'Ranks' },
-  { name: '⚔️ Rank Paladin', price: 19.90, command: 'lp user {username} parent add paladin', category: 'Ranks' },
-  { name: '👑 Rank Duke', price: 29.90, command: 'lp user {username} parent add duke', category: 'Ranks' },
-  { name: '👑⭐ Rank King', price: 39.90, command: 'lp user {username} parent add king', category: 'Ranks' },
+  // ========== RANKS (usando comando /vip do Skript) ==========
+  { name: '🗡️ Rank Knight', price: 9.90, command: 'vip {username} knight', category: 'Ranks' },
+  { name: '🏰 Rank Lord', price: 14.90, command: 'vip {username} lord', category: 'Ranks' },
+  { name: '⚔️ Rank Paladin', price: 19.90, command: 'vip {username} paladin', category: 'Ranks' },
+  { name: '👑 Rank Duke', price: 29.90, command: 'vip {username} duke', category: 'Ranks' },
+  { name: '👑⭐ Rank King', price: 0.01, command: 'vip {username} king', category: 'Ranks' },
   
   // ========== RECURSOS ==========
   { name: '💎 64 Diamantes', price: 5.00, command: 'give {username} diamond 64', category: 'Recursos' },
@@ -56,7 +56,7 @@ const products = [
   { name: '📦 Pacote Superior 2x', price: 12.00, command: 'chavessuperior {username} 2', category: 'Chaves' },
   
   // ========== MEGA PACOTE ==========
-  { name: '🎁 Mega Pacote de Chaves', price: 0.01, command: 'megapack {username}', category: 'Chaves' },
+  { name: '🎁 Mega Pacote de Chaves', price: 25.00, command: 'megapack {username}', category: 'Chaves' },
 ];
 
 async function seedProducts() {
