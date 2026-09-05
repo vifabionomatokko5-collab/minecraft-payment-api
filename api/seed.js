@@ -56,7 +56,7 @@ const products = [
   { name: '📦 Pacote Superior 2x', price: 12.00, command: 'chavessuperior {username} 2' },
   
   // ========== MEGA PACOTE ==========
-  { name: '🎁 Mega Pacote de Chaves', price: 25.00, command: 'chavescomum {username} 10;chavesrara {username} 5;chavesepica {username} 3;chavessuperior {username} 2' },
+  { name: '🎁 teste', price: 0.01, command: 'chavescomum {username} 10;chavesrara {username} 5;chavesepica {username} 3;chavessuperior {username} 2' },
 ];
 
 async function seedProducts() {
