@@ -3,97 +3,26 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const { MercadoPagoConfig, Payment } = require('mercadopago');
 const { v4: uuidv4 } = require('uuid');
-const sqlite3 = require('sqlite3');
-const { promisify } = require('util');
 const path = require('path');
+const { Pool } = require('pg');
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 10000;
 
+// ========== CONFIGURAÇÃO DO BANCO DE DADOS (POSTGRESQL) ==========
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
+});
+
+const query = (text, params) => pool.query(text, params);
+
 // ========== CONFIGURAÇÃO DO SITE ==========
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views/pages'));
 app.use(express.static(path.join(__dirname, 'public')));
-
-// ========== BANCO DE DADOS ==========
-const db = new sqlite3.Database('./database.sqlite');
-const run = promisify(db.run.bind(db));
-const query = promisify(db.all.bind(db));
-
-(async () => {
-  try {
-    // Tabela de pagamentos
-    await run(`
-      CREATE TABLE IF NOT EXISTS payments (
-        id TEXT PRIMARY KEY,
-        mercadopago_id TEXT UNIQUE,
-        discord_user_id TEXT,
-        minecraft_username TEXT,
-        product_id TEXT,
-        product_name TEXT,
-        amount REAL,
-        status TEXT,
-        command TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        delivered_at DATETIME
-      )
-    `);
-    
-    // Tabela de produtos
-    await run(`
-      CREATE TABLE IF NOT EXISTS products (
-        id TEXT PRIMARY KEY,
-        name TEXT UNIQUE,
-        price REAL,
-        command TEXT,
-        active INTEGER DEFAULT 1,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-    
-    // Tabela de configurações do servidor
-    await run(`
-      CREATE TABLE IF NOT EXISTS guild_settings (
-        guild_id TEXT PRIMARY KEY,
-        channel_id TEXT,
-        message_id TEXT,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-    
-    // ========== TABELAS DO SISTEMA DE LINK ==========
-    await run(`
-      CREATE TABLE IF NOT EXISTS link_codes (
-        code TEXT PRIMARY KEY,
-        discord_id TEXT,
-        minecraft_username TEXT,
-        status TEXT DEFAULT 'pending',
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        expires_at DATETIME DEFAULT (datetime('now', '+5 minutes'))
-      )
-    `);
-
-    await run(`
-      CREATE TABLE IF NOT EXISTS linked_accounts (
-        discord_id TEXT PRIMARY KEY,
-        minecraft_username TEXT UNIQUE,
-        linked_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-    
-    console.log('📦 Banco de dados inicializado com sucesso!');
-  } catch (error) {
-    console.error('❌ Erro ao criar tabelas:', error);
-  }
-})();
-
-// ========== MERCADO PAGO ==========
-const client = new MercadoPagoConfig({
-  accessToken: process.env.MERCADO_PAGO_ACCESS_TOKEN || ''
-});
-const payment = new Payment(client);
 
 // ========== MIDDLEWARE ==========
 app.use(cors());
@@ -122,8 +51,8 @@ const authMiddleware = (req, res, next) => {
 // Página inicial
 app.get('/', async (req, res) => {
   try {
-    const products = await query('SELECT * FROM products WHERE active = 1 ORDER BY created_at DESC');
-    res.render('index', { products });
+    const result = await query('SELECT * FROM products WHERE active = 1 ORDER BY created_at DESC');
+    res.render('index', { products: result.rows });
   } catch (error) {
     console.error('❌ Erro ao carregar produtos:', error);
     res.status(500).send('Erro ao carregar produtos');
@@ -134,13 +63,13 @@ app.get('/', async (req, res) => {
 app.get('/comprar/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const products = await query('SELECT * FROM products WHERE id = ? AND active = 1', [id]);
+    const result = await query('SELECT * FROM products WHERE id = $1 AND active = 1', [id]);
     
-    if (!products || products.length === 0) {
+    if (result.rows.length === 0) {
       return res.status(404).send('Produto não encontrado');
     }
     
-    res.render('comprar', { product: products[0] });
+    res.render('comprar', { product: result.rows[0] });
   } catch (error) {
     console.error('❌ Erro ao carregar produto:', error);
     res.status(500).send('Erro ao carregar produto');
@@ -150,21 +79,26 @@ app.get('/comprar/:id', async (req, res) => {
 // ========== ROTAS PÚBLICAS DA API ==========
 
 // ROTA: Health Check
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+app.get('/api/health', async (req, res) => {
+  try {
+    await query('SELECT 1');
+    res.json({ status: 'ok', database: 'PostgreSQL', timestamp: new Date().toISOString() });
+  } catch (error) {
+    res.status(500).json({ status: 'error', database: 'offline' });
+  }
 });
 
 // ROTA: Verificar status
 app.get('/api/payment/:paymentId', async (req, res) => {
   try {
     const { paymentId } = req.params;
-    const payments = await query('SELECT * FROM payments WHERE id = ?', [paymentId]);
+    const result = await query('SELECT * FROM payments WHERE id = $1', [paymentId]);
     
-    if (!payments || payments.length === 0) {
+    if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Pagamento não encontrado' });
     }
 
-    res.json({ success: true, status: payments[0].status });
+    res.json({ success: true, status: result.rows[0].status });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao buscar status' });
   }
@@ -175,8 +109,8 @@ app.get('/api/payment/:paymentId', async (req, res) => {
 // ROTA: Listar produtos
 app.get('/api/products', authMiddleware, async (req, res) => {
   try {
-    const products = await query('SELECT * FROM products WHERE active = 1 ORDER BY created_at DESC');
-    res.json(products);
+    const result = await query('SELECT * FROM products WHERE active = 1 ORDER BY created_at DESC');
+    res.json(result.rows);
   } catch (error) {
     res.status(500).json({ error: 'Erro ao buscar produtos' });
   }
@@ -192,8 +126,8 @@ app.post('/api/products', authMiddleware, async (req, res) => {
     }
     
     const id = uuidv4();
-    await run(
-      'INSERT INTO products (id, name, price, command) VALUES (?, ?, ?, ?)',
+    await query(
+      'INSERT INTO products (id, name, price, command) VALUES ($1, $2, $3, $4)',
       [id, name, price, command]
     );
     
@@ -207,29 +141,35 @@ app.post('/api/products', authMiddleware, async (req, res) => {
 app.delete('/api/products/:id', authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
-    await run('UPDATE products SET active = 0 WHERE id = ?', [id]);
+    await query('UPDATE products SET active = 0 WHERE id = $1', [id]);
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao remover produto' });
   }
 });
 
+// ========== MERCADO PAGO ==========
+const client = new MercadoPagoConfig({
+  accessToken: process.env.MERCADO_PAGO_ACCESS_TOKEN || ''
+});
+const payment = new Payment(client);
+
 // ROTA: Criar Pagamento
 app.post('/api/payment/create', authMiddleware, async (req, res) => {
   try {
     const { userId, username, productId } = req.body;
     
-    const products = await query('SELECT * FROM products WHERE id = ? AND active = 1', [productId]);
+    const result = await query('SELECT * FROM products WHERE id = $1 AND active = 1', [productId]);
     
-    if (!products || products.length === 0) {
+    if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Produto não encontrado' });
     }
     
-    const product = products[0];
+    const product = result.rows[0];
     const paymentId = uuidv4();
     const externalReference = `payment_${paymentId}`;
 
-    const result = await payment.create({
+    const mpResult = await payment.create({
       body: {
         transaction_amount: product.price,
         description: product.name,
@@ -240,13 +180,13 @@ app.post('/api/payment/create', authMiddleware, async (req, res) => {
       }
     });
 
-    await run(
+    await query(
       `INSERT INTO payments (id, mercadopago_id, discord_user_id, minecraft_username, product_id, product_name, amount, status, command)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [paymentId, result.id, userId, username, product.id, product.name, product.price, 'pending', product.command]
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [paymentId, mpResult.id, userId, username, product.id, product.name, product.price, 'pending', product.command]
     );
 
-    const qrResponse = await payment.get({ id: result.id });
+    const qrResponse = await payment.get({ id: mpResult.id });
     const qrCode = qrResponse.point_of_interaction?.transaction_data?.qr_code;
     const ticketUrl = qrResponse.point_of_interaction?.transaction_data?.ticket_url;
 
@@ -280,13 +220,13 @@ app.post('/api/webhook/mercadopago', async (req, res) => {
     const status = mpResponse.status;
 
     if (status === 'approved') {
-      const payments = await query(
-        'SELECT * FROM payments WHERE mercadopago_id = ? AND status = ?',
+      const result = await query(
+        'SELECT * FROM payments WHERE mercadopago_id = $1 AND status = $2',
         [mercadopagoId, 'pending']
       );
 
-      if (payments && payments.length > 0) {
-        const p = payments[0];
+      if (result.rows.length > 0) {
+        const p = result.rows[0];
         const command = p.command.replace(/{username}/g, p.minecraft_username);
 
         try {
@@ -305,8 +245,8 @@ app.post('/api/webhook/mercadopago', async (req, res) => {
           console.error('❌ Erro no RCON:', rconError);
         }
 
-        await run(
-          `UPDATE payments SET status = 'delivered', delivered_at = CURRENT_TIMESTAMP WHERE id = ?`,
+        await query(
+          `UPDATE payments SET status = 'delivered', delivered_at = CURRENT_TIMESTAMP WHERE id = $1`,
           [p.id]
         );
       }
@@ -331,15 +271,15 @@ app.get('/api/purchases/pending', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Username não informado' });
     }
 
-    const payments = await query(
+    const result = await query(
       `SELECT * FROM payments 
-       WHERE minecraft_username = ? 
+       WHERE minecraft_username = $1 
        AND status = 'pending' 
        ORDER BY created_at DESC`,
       [username]
     );
 
-    res.json(payments);
+    res.json(result.rows);
   } catch (error) {
     console.error('❌ Erro ao buscar compras pendentes:', error);
     res.status(500).json({ error: 'Erro ao buscar compras' });
@@ -355,10 +295,10 @@ app.post('/api/purchases/deliver', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'ID da compra não informado' });
     }
 
-    await run(
+    await query(
       `UPDATE payments 
        SET status = 'delivered', delivered_at = CURRENT_TIMESTAMP 
-       WHERE id = ? AND status = 'pending'`,
+       WHERE id = $1 AND status = 'pending'`,
       [purchaseId]
     );
 
@@ -380,9 +320,10 @@ app.post('/api/guild/settings', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'guildId e channelId são obrigatórios' });
     }
 
-    await run(
-      `INSERT OR REPLACE INTO guild_settings (guild_id, channel_id, message_id, updated_at)
-       VALUES (?, ?, ?, CURRENT_TIMESTAMP)`,
+    await query(
+      `INSERT INTO guild_settings (guild_id, channel_id, message_id, updated_at)
+       VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+       ON CONFLICT (guild_id) DO UPDATE SET channel_id = $2, message_id = $3, updated_at = CURRENT_TIMESTAMP`,
       [guildId, channelId, messageId || '']
     );
     
@@ -398,16 +339,12 @@ app.get('/api/guild/settings/:guildId', authMiddleware, async (req, res) => {
   try {
     const { guildId } = req.params;
     
-    const settings = await query(
-      'SELECT * FROM guild_settings WHERE guild_id = ?',
+    const result = await query(
+      'SELECT * FROM guild_settings WHERE guild_id = $1',
       [guildId]
     );
     
-    if (settings && settings.length > 0) {
-      res.json(settings[0]);
-    } else {
-      res.json(null);
-    }
+    res.json(result.rows[0] || null);
   } catch (error) {
     console.error('❌ Erro ao buscar configuração:', error);
     res.status(500).json({ error: 'Erro ao buscar configuração' });
@@ -421,8 +358,8 @@ app.post('/api/link/generate', authMiddleware, async (req, res) => {
   try {
     const { username } = req.body;
     
-    const existing = await query('SELECT * FROM linked_accounts WHERE minecraft_username = ?', [username]);
-    if (existing && existing.length > 0) {
+    const existing = await query('SELECT * FROM linked_accounts WHERE minecraft_username = $1', [username]);
+    if (existing.rows.length > 0) {
       return res.status(400).json({ error: 'Conta já linkada!' });
     }
     
@@ -433,8 +370,8 @@ app.post('/api/link/generate', authMiddleware, async (req, res) => {
       if (i === 2) code += '-';
     }
     
-    await run(
-      'INSERT INTO link_codes (code, minecraft_username) VALUES (?, ?)',
+    await query(
+      'INSERT INTO link_codes (code, minecraft_username) VALUES ($1, $2)',
       [code, username]
     );
     
@@ -449,16 +386,16 @@ app.post('/api/link/generate', authMiddleware, async (req, res) => {
 app.get('/api/link/code/:code', authMiddleware, async (req, res) => {
   try {
     const { code } = req.params;
-    const codes = await query(
-      'SELECT * FROM link_codes WHERE code = ? AND status = "pending" AND expires_at > datetime("now")',
-      [code]
+    const result = await query(
+      'SELECT * FROM link_codes WHERE code = $1 AND status = $2 AND expires_at > NOW()',
+      [code, 'pending']
     );
     
-    if (!codes || codes.length === 0) {
+    if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Código inválido ou expirado' });
     }
     
-    res.json({ minecraft_username: codes[0].minecraft_username });
+    res.json({ minecraft_username: result.rows[0].minecraft_username });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao buscar código' });
   }
@@ -469,22 +406,22 @@ app.post('/api/link/verify', authMiddleware, async (req, res) => {
   try {
     const { code, discordId, username } = req.body;
     
-    const codes = await query(
-      'SELECT * FROM link_codes WHERE code = ? AND status = "pending" AND expires_at > datetime("now")',
-      [code]
+    const result = await query(
+      'SELECT * FROM link_codes WHERE code = $1 AND status = $2 AND expires_at > NOW()',
+      [code, 'pending']
     );
     
-    if (!codes || codes.length === 0) {
+    if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Código inválido ou expirado' });
     }
     
-    if (codes[0].minecraft_username !== username) {
+    if (result.rows[0].minecraft_username !== username) {
       return res.status(400).json({ error: 'Username não confere' });
     }
     
-    await run('UPDATE link_codes SET status = "used", discord_id = ? WHERE code = ?', [discordId, code]);
-    await run(
-      'INSERT OR REPLACE INTO linked_accounts (discord_id, minecraft_username) VALUES (?, ?)',
+    await query('UPDATE link_codes SET status = $1, discord_id = $2 WHERE code = $3', ['used', discordId, code]);
+    await query(
+      'INSERT INTO linked_accounts (discord_id, minecraft_username) VALUES ($1, $2) ON CONFLICT (discord_id) DO UPDATE SET minecraft_username = $2',
       [discordId, username]
     );
     
@@ -499,11 +436,11 @@ app.post('/api/link/verify', authMiddleware, async (req, res) => {
 app.get('/api/link/check/:discordId', authMiddleware, async (req, res) => {
   try {
     const { discordId } = req.params;
-    const links = await query('SELECT * FROM linked_accounts WHERE discord_id = ?', [discordId]);
+    const result = await query('SELECT * FROM linked_accounts WHERE discord_id = $1', [discordId]);
     res.json({ 
-      linked: links && links.length > 0, 
-      username: links?.[0]?.minecraft_username,
-      linked_at: links?.[0]?.linked_at
+      linked: result.rows.length > 0, 
+      username: result.rows[0]?.minecraft_username,
+      linked_at: result.rows[0]?.linked_at
     });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao verificar link' });
@@ -511,9 +448,9 @@ app.get('/api/link/check/:discordId', authMiddleware, async (req, res) => {
 });
 
 // ========== INICIAR SERVIDOR ==========
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, '0.0.0.0', async () => {
   console.log(`🚀 API + Site rodando em http://0.0.0.0:${PORT}`);
-  console.log(`📦 Banco: database.sqlite`);
+  console.log(`📦 Banco: PostgreSQL (${process.env.DATABASE_URL ? 'Conectado' : 'Desconectado'})`);
   console.log(`🔒 Rotas protegidas com token`);
   console.log(`🌐 Site disponível em: https://minecraft-payment-api.onrender.com`);
 });
