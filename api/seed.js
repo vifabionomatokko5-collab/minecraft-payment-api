@@ -60,38 +60,42 @@ const products = [
 ];
 
 async function seedProducts() {
-  console.log('🔄 Iniciando seed de produtos...');
-  console.log(`📦 ${products.length} produtos para adicionar\n`);
+  console.log('🔄 Iniciando seed automático de produtos...');
   
-  let added = 0;
-  let skipped = 0;
-  
-  for (const product of products) {
-    try {
-      const id = uuidv4();
-      const result = await pool.query(
-        `INSERT INTO products (id, name, price, command) 
-         VALUES ($1, $2, $3, $4) 
-         ON CONFLICT (name) DO NOTHING
-         RETURNING id`,
-        [id, product.name, product.price, product.command]
-      );
-      
-      if (result.rows.length > 0) {
+  try {
+    // Verificar se já existem produtos
+    const checkResult = await pool.query('SELECT COUNT(*) FROM products');
+    const count = parseInt(checkResult.rows[0].count);
+    
+    if (count > 0) {
+      console.log(`📦 ${count} produtos já existentes. Seed ignorado.`);
+      return;
+    }
+    
+    console.log('📦 Banco vazio. Adicionando produtos...');
+    
+    let added = 0;
+    
+    for (const product of products) {
+      try {
+        const id = uuidv4();
+        await pool.query(
+          `INSERT INTO products (id, name, price, command) 
+           VALUES ($1, $2, $3, $4)`,
+          [id, product.name, product.price, product.command]
+        );
         console.log(`✅ ${product.name} - R$ ${product.price.toFixed(2)}`);
         added++;
-      } else {
-        console.log(`⏭️ ${product.name} - Já existe`);
-        skipped++;
+      } catch (error) {
+        console.error(`❌ Erro ao adicionar ${product.name}:`, error.message);
       }
-    } catch (error) {
-      console.error(`❌ Erro ao adicionar ${product.name}:`, error.message);
     }
+    
+    console.log(`\n🎉 Seed automático finalizado! ${added} produtos adicionados.`);
+  } catch (error) {
+    console.error('❌ Erro no seed:', error);
   }
-  
-  console.log(`\n🎉 Seed finalizado!`);
-  console.log(`📊 ${added} produtos adicionados, ${skipped} produtos já existentes`);
-  process.exit(0);
 }
 
-seedProducts();
+// Exportar a função corretamente
+module.exports = seedProducts;
