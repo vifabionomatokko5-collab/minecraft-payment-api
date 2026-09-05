@@ -17,7 +17,7 @@
             <h2 style="text-align:center;color:#ff6b00;">Resumo do Pedido</h2>
             
             <div id="order-summary" style="margin:20px 0;padding:15px;background:#1a1a2e;border-radius:8px;">
-                <!-- Itens serão inseridos aqui -->
+                <p style="color:#666;text-align:center;">Carregando...</p>
             </div>
 
             <div style="text-align:center;font-size:1.5rem;color:#ff6b00;font-weight:bold;margin:15px 0;">
@@ -32,7 +32,7 @@
                 <button type="submit" class="btn-pay">💰 Gerar PIX</button>
             </form>
 
-            <div id="payment-result">
+            <div id="payment-result" style="display:none;">
                 <h3>📲 Escaneie o QR Code</h3>
                 <img id="qr-code" src="" alt="QR Code PIX">
                 <p>Ou copie o código abaixo:</p>
@@ -43,29 +43,26 @@
         </div>
     </main>
 
+    <footer>
+        <p>© 2026 Miragem Store - Todos os direitos reservados</p>
+    </footer>
+
     <script>
         const urlParams = new URLSearchParams(window.location.search);
         const itemsParam = urlParams.get('items');
         let items = [];
         let total = 0;
-
-        if (itemsParam) {
-            const pairs = itemsParam.split(',');
-            pairs.forEach(pair => {
-                const [id, qty] = pair.split(':');
-                // Buscar informações do produto via API
-                fetch(`/api/products/${id}`)
-                    .then(res => res.json())
-                    .then(product => {
-                        items.push({ ...product, qty: parseInt(qty) });
-                        renderSummary();
-                    });
-            });
-        }
+        let loadedItems = 0;
 
         function renderSummary() {
             const container = document.getElementById('order-summary');
             total = 0;
+            
+            if (items.length === 0) {
+                container.innerHTML = '<p style="color:#666;text-align:center;">Carrinho vazio</p>';
+                document.getElementById('total-amount').textContent = 'R$ 0.00';
+                return;
+            }
             
             container.innerHTML = items.map(item => {
                 total += item.price * item.qty;
@@ -80,6 +77,39 @@
             document.getElementById('total-amount').textContent = `R$ ${total.toFixed(2)}`;
         }
 
+        // Carregar produtos do carrinho
+        if (itemsParam) {
+            const pairs = itemsParam.split(',');
+            const totalItems = pairs.length;
+            
+            pairs.forEach((pair, index) => {
+                const [id, qty] = pair.split(':');
+                fetch(`/api/products/${id}`)
+                    .then(res => {
+                        if (!res.ok) {
+                            throw new Error('Produto não encontrado');
+                        }
+                        return res.json();
+                    })
+                    .then(product => {
+                        items.push({ ...product, qty: parseInt(qty) });
+                        loadedItems++;
+                        if (loadedItems === totalItems) {
+                            renderSummary();
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Erro ao carregar produto:', error);
+                        loadedItems++;
+                        if (loadedItems === totalItems) {
+                            renderSummary();
+                        }
+                    });
+            });
+        } else {
+            renderSummary();
+        }
+
         document.getElementById('payment-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             
@@ -90,16 +120,21 @@
                 return;
             }
 
+            if (items.length === 0) {
+                alert('Seu carrinho está vazio!');
+                return;
+            }
+
             const btn = document.querySelector('.btn-pay');
             btn.textContent = '🔄 Gerando...';
             btn.disabled = true;
 
             try {
                 // Criar pagamento para cada item no carrinho
-                const responses = [];
+                const paymentPromises = [];
                 for (const item of items) {
                     for (let i = 0; i < item.qty; i++) {
-                        const response = await fetch('/api/payment/create', {
+                        const promise = fetch('/api/payment/create', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -107,43 +142,62 @@
                                 username: username,
                                 productId: item.id
                             })
-                        });
-                        const data = await response.json();
-                        responses.push(data);
+                        }).then(res => res.json());
+                        paymentPromises.push(promise);
                     }
                 }
 
-                // Mostrar o primeiro QR Code (ou consolidar)
+                const responses = await Promise.all(paymentPromises);
+                
+                // Verificar se todos foram bem sucedidos
+                const failed = responses.find(r => !r.success);
+                if (failed) {
+                    alert('❌ Erro ao criar pagamento: ' + (failed.error || 'Tente novamente'));
+                    btn.textContent = '💰 Gerar PIX';
+                    btn.disabled = false;
+                    return;
+                }
+
+                // Mostrar o primeiro QR Code
                 const first = responses[0];
                 document.getElementById('payment-result').style.display = 'block';
                 document.getElementById('qr-code').src = first.qrCode;
                 document.getElementById('pix-code').value = first.qrCode;
+                document.getElementById('payment-status').textContent = '⏳ Aguardando pagamento...';
+                document.getElementById('payment-status').className = 'pending';
 
-                // Verificar status
+                // Verificar status de todos os pagamentos
                 let attempts = 0;
+                const maxAttempts = 120;
+                let allDelivered = false;
+
                 const interval = setInterval(async () => {
                     attempts++;
-                    let allDelivered = true;
                     
-                    for (const resp of responses) {
-                        const statusRes = await fetch(`/api/payment/${resp.paymentId}`);
-                        const statusData = await statusRes.json();
-                        if (statusData.status !== 'delivered') {
-                            allDelivered = false;
+                    try {
+                        const statusPromises = responses.map(r => 
+                            fetch(`/api/payment/${r.paymentId}`).then(res => res.json())
+                        );
+                        const statuses = await Promise.all(statusPromises);
+                        
+                        allDelivered = statuses.every(s => s.status === 'delivered');
+                        
+                        if (allDelivered) {
+                            document.getElementById('payment-status').textContent = '✅ Todos os itens entregues!';
+                            document.getElementById('payment-status').className = 'delivered';
+                            clearInterval(interval);
+                            document.getElementById('payment-form').style.display = 'none';
+                        } else if (attempts >= maxAttempts) {
+                            document.getElementById('payment-status').textContent = '⏰ Tempo esgotado. Se pagou, aguarde.';
+                            document.getElementById('payment-status').className = 'error';
+                            clearInterval(interval);
+                        } else {
+                            const deliveredCount = statuses.filter(s => s.status === 'delivered').length;
+                            document.getElementById('payment-status').textContent = 
+                                `⏳ Aguardando pagamento... (${deliveredCount}/${responses.length} entregues)`;
                         }
-                    }
-
-                    if (allDelivered) {
-                        document.getElementById('payment-status').textContent = '✅ Todos os itens entregues!';
-                        document.getElementById('payment-status').className = 'delivered';
-                        clearInterval(interval);
-                        document.getElementById('payment-form').style.display = 'none';
-                    } else if (attempts >= 120) {
-                        document.getElementById('payment-status').textContent = '⏰ Tempo esgotado.';
-                        document.getElementById('payment-status').className = 'error';
-                        clearInterval(interval);
-                    } else {
-                        document.getElementById('payment-status').textContent = `⏳ Aguardando pagamento... (${Math.round(attempts * 5 / 60)}min)`;
+                    } catch (error) {
+                        console.error('Erro ao verificar status:', error);
                     }
                 }, 5000);
 
