@@ -30,6 +30,9 @@ const query = promisify(db.all.bind(db));
         amount REAL,
         status TEXT,
         command TEXT,
+        coupon_code TEXT,
+        discount REAL,
+        final_amount REAL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         delivered_at DATETIME
       )
@@ -54,6 +57,17 @@ const query = promisify(db.all.bind(db));
         channel_id TEXT,
         message_id TEXT,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    
+    // Tabela de cupons
+    await run(`
+      CREATE TABLE IF NOT EXISTS coupons (
+        id TEXT PRIMARY KEY,
+        code TEXT UNIQUE,
+        discount INTEGER,
+        active INTEGER DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
     
@@ -161,7 +175,7 @@ app.delete('/api/products/:id', authMiddleware, async (req, res) => {
 // ROTA: Criar Pagamento
 app.post('/api/payment/create', authMiddleware, async (req, res) => {
   try {
-    const { userId, username, productId } = req.body;
+    const { userId, username, productId, couponCode } = req.body;
     
     const products = await query('SELECT * FROM products WHERE id = ? AND active = 1', [productId]);
     
@@ -170,13 +184,31 @@ app.post('/api/payment/create', authMiddleware, async (req, res) => {
     }
     
     const product = products[0];
+    let finalPrice = product.price;
+    let discount = 0;
+    let couponCodeUsed = null;
+    
+    // Validar cupom se foi fornecido
+    if (couponCode) {
+      const coupons = await query(
+        'SELECT * FROM coupons WHERE code = ? AND active = 1',
+        [couponCode.toUpperCase()]
+      );
+      
+      if (coupons && coupons.length > 0) {
+        discount = coupons[0].discount;
+        finalPrice = product.price * (1 - discount / 100);
+        couponCodeUsed = couponCode.toUpperCase();
+      }
+    }
+    
     const paymentId = uuidv4();
     const externalReference = `payment_${paymentId}`;
 
     const result = await payment.create({
       body: {
-        transaction_amount: product.price,
-        description: product.name,
+        transaction_amount: finalPrice,
+        description: product.name + (couponCodeUsed ? ` (CUPOM: ${couponCodeUsed})` : ''),
         payment_method_id: 'pix',
         payer: { email: 'comprador@email.com' },
         external_reference: externalReference,
@@ -185,9 +217,9 @@ app.post('/api/payment/create', authMiddleware, async (req, res) => {
     });
 
     await run(
-      `INSERT INTO payments (id, mercadopago_id, discord_user_id, minecraft_username, product_id, product_name, amount, status, command)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [paymentId, result.id, userId, username, product.id, product.name, product.price, 'pending', product.command]
+      `INSERT INTO payments (id, mercadopago_id, discord_user_id, minecraft_username, product_id, product_name, amount, status, command, coupon_code, discount, final_amount)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [paymentId, result.id, userId, username, product.id, product.name, product.price, 'pending', product.command, couponCodeUsed, discount, finalPrice]
     );
 
     const qrResponse = await payment.get({ id: result.id });
@@ -199,7 +231,9 @@ app.post('/api/payment/create', authMiddleware, async (req, res) => {
       paymentId,
       qrCode,
       ticketUrl,
-      amount: product.price,
+      amount: finalPrice,
+      originalAmount: product.price,
+      discount: discount,
       product: product.name
     });
 
@@ -358,10 +392,74 @@ app.get('/api/guild/settings/:guildId', authMiddleware, async (req, res) => {
   }
 });
 
+// ========== ROTAS DE CUPONS ==========
+
+// ROTA: Listar todos os cupons
+app.get('/api/coupons', authMiddleware, async (req, res) => {
+  try {
+    const coupons = await query('SELECT * FROM coupons WHERE active = 1 ORDER BY created_at DESC');
+    res.json(coupons);
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao buscar cupons' });
+  }
+});
+
+// ROTA: Adicionar cupom
+app.post('/api/coupons', authMiddleware, async (req, res) => {
+  try {
+    const { code, discount } = req.body;
+    
+    if (!code || !discount) {
+      return res.status(400).json({ error: 'Código e desconto são obrigatórios' });
+    }
+    
+    const id = uuidv4();
+    await run(
+      'INSERT INTO coupons (id, code, discount) VALUES (?, ?, ?)',
+      [id, code.toUpperCase(), discount]
+    );
+    
+    res.json({ success: true, id, code: code.toUpperCase(), discount });
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao adicionar cupom' });
+  }
+});
+
+// ROTA: Remover cupom
+app.delete('/api/coupons/:code', authMiddleware, async (req, res) => {
+  try {
+    const { code } = req.params;
+    await run('UPDATE coupons SET active = 0 WHERE code = ?', [code.toUpperCase()]);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao remover cupom' });
+  }
+});
+
+// ROTA: Validar cupom
+app.get('/api/coupons/validate/:code', authMiddleware, async (req, res) => {
+  try {
+    const { code } = req.params;
+    const coupons = await query(
+      'SELECT * FROM coupons WHERE code = ? AND active = 1',
+      [code.toUpperCase()]
+    );
+    
+    if (coupons && coupons.length > 0) {
+      res.json({ valid: true, discount: coupons[0].discount });
+    } else {
+      res.json({ valid: false });
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao validar cupom' });
+  }
+});
+
 // ========== INICIAR SERVIDOR ==========
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 API rodando em http://0.0.0.0:${PORT}`);
   console.log(`📦 Banco: database.sqlite`);
   console.log(`🔒 Rotas protegidas com token`);
   console.log(`📌 Rotas de configuração: /api/guild/settings`);
+  console.log(`🏷️ Rotas de cupons: /api/coupons`);
 });
