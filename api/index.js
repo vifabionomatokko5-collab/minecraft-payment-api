@@ -49,13 +49,14 @@ app.use(express.json());
       )
     `);
     
-    // Tabela de produtos
+    // Tabela de produtos (COM CATEGORIA)
     await query(`
       CREATE TABLE IF NOT EXISTS products (
         id TEXT PRIMARY KEY,
         name TEXT UNIQUE,
         price REAL,
         command TEXT,
+        category TEXT,
         active INTEGER DEFAULT 1,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
