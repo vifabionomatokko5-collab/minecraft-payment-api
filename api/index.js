@@ -72,8 +72,62 @@ const PRODUCTS = {
 app.use(cors());
 app.use(express.json());
 
-// ========== ROTA: Criar Pagamento ==========
-app.post('/api/payment/create', async (req, res) => {
+// ========== MIDDLEWARE DE AUTENTICAÇÃO ==========
+const authMiddleware = (req, res, next) => {
+  const token = req.headers['authorization'];
+  const expectedToken = process.env.API_SECRET_TOKEN || 'M1n3P4yM3nt-S3cr3t-T0k3n-2026!';
+  
+  if (!token) {
+    return res.status(401).json({ error: 'Token não fornecido' });
+  }
+  
+  const cleanToken = token.startsWith('Bearer ') ? token.slice(7) : token;
+  
+  if (cleanToken !== expectedToken) {
+    return res.status(403).json({ error: 'Token inválido' });
+  }
+  
+  next();
+};
+
+// ========== ROTAS PÚBLICAS ==========
+
+// ROTA: Listar produtos
+app.get('/api/products', (req, res) => {
+  res.json({
+    products: Object.entries(PRODUCTS).map(([id, product]) => ({
+      id,
+      name: product.name,
+      price: product.price
+    }))
+  });
+});
+
+// ROTA: Health Check
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// ROTA: Verificar status
+app.get('/api/payment/:paymentId', async (req, res) => {
+  try {
+    const { paymentId } = req.params;
+    const payments = await query('SELECT * FROM payments WHERE id = ?', [paymentId]);
+    
+    if (!payments || payments.length === 0) {
+      return res.status(404).json({ error: 'Pagamento não encontrado' });
+    }
+
+    res.json({ success: true, status: payments[0].status });
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao buscar status' });
+  }
+});
+
+// ========== ROTAS PROTEGIDAS ==========
+
+// ROTA: Criar Pagamento
+app.post('/api/payment/create', authMiddleware, async (req, res) => {
   try {
     const { userId, username, productId } = req.body;
     const product = PRODUCTS[productId];
@@ -121,7 +175,7 @@ app.post('/api/payment/create', async (req, res) => {
   }
 });
 
-// ========== ROTA: Webhook ==========
+// ROTA: Webhook (NÃO USA AUTENTICAÇÃO - Mercado Pago não envia token)
 app.post('/api/webhook/mercadopago', async (req, res) => {
   try {
     console.log('📨 Webhook recebido!');
@@ -176,42 +230,10 @@ app.post('/api/webhook/mercadopago', async (req, res) => {
   }
 });
 
-// ========== ROTA: Verificar Status ==========
-app.get('/api/payment/:paymentId', async (req, res) => {
-  try {
-    const { paymentId } = req.params;
-    const payments = await query('SELECT * FROM payments WHERE id = ?', [paymentId]);
-    
-    if (!payments || payments.length === 0) {
-      return res.status(404).json({ error: 'Pagamento não encontrado' });
-    }
+// ========== ROTAS DO PLUGIN ==========
 
-    res.json({ success: true, status: payments[0].status });
-  } catch (error) {
-    res.status(500).json({ error: 'Erro ao buscar status' });
-  }
-});
-
-// ========== ROTA: Listar Produtos ==========
-app.get('/api/products', (req, res) => {
-  res.json({
-    products: Object.entries(PRODUCTS).map(([id, product]) => ({
-      id,
-      name: product.name,
-      price: product.price
-    }))
-  });
-});
-
-// ========== ROTA: Health Check ==========
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
-// ========== NOVAS ROTAS PARA O PLUGIN ==========
-
-// ROTA: Buscar compras pendentes de um jogador
-app.get('/api/purchases/pending', async (req, res) => {
+// ROTA: Buscar compras pendentes
+app.get('/api/purchases/pending', authMiddleware, async (req, res) => {
   try {
     const { username } = req.query;
     
@@ -235,7 +257,7 @@ app.get('/api/purchases/pending', async (req, res) => {
 });
 
 // ROTA: Marcar compra como entregue
-app.post('/api/purchases/deliver', async (req, res) => {
+app.post('/api/purchases/deliver', authMiddleware, async (req, res) => {
   try {
     const { purchaseId } = req.body;
     
@@ -271,5 +293,5 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 API rodando em http://0.0.0.0:${PORT}`);
   console.log(`📦 Banco: database.sqlite`);
   console.log(`📦 Produtos disponíveis: ${Object.keys(PRODUCTS).join(', ')}`);
-  console.log(`✅ Novos endpoints para plugin: /api/purchases/pending e /api/purchases/deliver`);
+  console.log(`🔒 Rotas protegidas com token`);
 });
