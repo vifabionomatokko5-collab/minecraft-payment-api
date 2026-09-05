@@ -9,60 +9,61 @@ const pool = new Pool({
 });
 
 const products = [
-  // ========== RANKS (comandos simples) ==========
-  { name: '🗡️ Rank Knight', price: 9.90, command: 'lp user {username} parent add knight' },
-  { name: '🏰 Rank Lord', price: 14.90, command: 'lp user {username} parent add lord' },
-  { name: '⚔️ Rank Paladin', price: 19.90, command: 'lp user {username} parent add paladin' },
-  { name: '👑 Rank Duke', price: 29.90, command: 'lp user {username} parent add duke' },
-  { name: '👑⭐ Rank King', price: 39.90, command: 'lp user {username} parent add king' },
+  // ========== RANKS ==========
+  { name: '🗡️ Rank Knight', price: 9.90, command: 'lp user {username} parent add knight', category: 'Ranks' },
+  { name: '🏰 Rank Lord', price: 14.90, command: 'lp user {username} parent add lord', category: 'Ranks' },
+  { name: '⚔️ Rank Paladin', price: 19.90, command: 'lp user {username} parent add paladin', category: 'Ranks' },
+  { name: '👑 Rank Duke', price: 29.90, command: 'lp user {username} parent add duke', category: 'Ranks' },
+  { name: '👑⭐ Rank King', price: 39.90, command: 'lp user {username} parent add king', category: 'Ranks' },
   
-  // ========== RECURSOS (comandos simples) ==========
-  { name: '💎 64 Diamantes', price: 5.00, command: 'give {username} diamond 64' },
-  { name: '🪙 64 Ouros', price: 3.00, command: 'give {username} gold_ingot 64' },
-  { name: '🟢 64 Esmeraldas', price: 4.00, command: 'give {username} emerald 64' },
-  { name: '🔴 64 Redstone', price: 2.00, command: 'give {username} redstone 64' },
-  { name: '⚫ 32 Obsidian', price: 3.00, command: 'give {username} obsidian 32' },
-  { name: '💎 Bloco de Diamante', price: 8.00, command: 'give {username} diamond_block 1' },
-  { name: '🪙 Bloco de Ouro', price: 5.00, command: 'give {username} gold_block 1' },
+  // ========== RECURSOS ==========
+  { name: '💎 64 Diamantes', price: 5.00, command: 'give {username} diamond 64', category: 'Recursos' },
+  { name: '🪙 64 Ouros', price: 3.00, command: 'give {username} gold_ingot 64', category: 'Recursos' },
+  { name: '🟢 64 Esmeraldas', price: 4.00, command: 'give {username} emerald 64', category: 'Recursos' },
+  { name: '🔴 64 Redstone', price: 2.00, command: 'give {username} redstone 64', category: 'Recursos' },
+  { name: '⚫ 32 Obsidian', price: 3.00, command: 'give {username} obsidian 32', category: 'Recursos' },
+  { name: '💎 Bloco de Diamante', price: 8.00, command: 'give {username} diamond_block 1', category: 'Recursos' },
+  { name: '🪙 Bloco de Ouro', price: 5.00, command: 'give {username} gold_block 1', category: 'Recursos' },
   
-  // ========== EQUIPAMENTOS (comandos simples) ==========
-  { name: '⚔️ Espada Diamante', price: 4.00, command: 'give {username} diamond_sword 1' },
-  { name: '🪓 Machado Diamante', price: 4.00, command: 'give {username} diamond_axe 1' },
-  { name: '⛏️ Picareta Diamante', price: 4.00, command: 'give {username} diamond_pickaxe 1' },
-  { name: '🏹 Arco', price: 3.00, command: 'give {username} bow 1' },
-  { name: '🛡️ Escudo', price: 2.00, command: 'give {username} shield 1' },
-  { name: '💨 Elytra', price: 10.00, command: 'give {username} elytra 1' },
+  // ========== EQUIPAMENTOS ==========
+  { name: '⚔️ Espada Diamante', price: 4.00, command: 'give {username} diamond_sword 1', category: 'Equipamentos' },
+  { name: '🪓 Machado Diamante', price: 4.00, command: 'give {username} diamond_axe 1', category: 'Equipamentos' },
+  { name: '⛏️ Picareta Diamante', price: 4.00, command: 'give {username} diamond_pickaxe 1', category: 'Equipamentos' },
+  { name: '🏹 Arco', price: 3.00, command: 'give {username} bow 1', category: 'Equipamentos' },
+  { name: '🛡️ Escudo', price: 2.00, command: 'give {username} shield 1', category: 'Equipamentos' },
+  { name: '💨 Elytra', price: 10.00, command: 'give {username} elytra 1', category: 'Equipamentos' },
   
-  // ========== KITS (usam Skript) ==========
-  { name: '📦 Kit Iniciante', price: 2.00, command: 'kitiniciante {username}' },
-  { name: '📦 Kit Guerreiro', price: 8.00, command: 'kitguerreiro {username}' },
-  { name: '📦 Kit Construtor', price: 6.00, command: 'kitconstrutor {username}' },
+  // ========== KITS ==========
+  { name: '📦 Kit Iniciante', price: 2.00, command: 'kitiniciante {username}', category: 'Kits' },
+  { name: '📦 Kit Guerreiro', price: 8.00, command: 'kitguerreiro {username}', category: 'Kits' },
+  { name: '📦 Kit Construtor', price: 6.00, command: 'kitconstrutor {username}', category: 'Kits' },
   
-  // ========== PACOTES (usam Skript) ==========
-  { name: '🎁 Pack Diamante', price: 12.00, command: 'packdiamante {username}' },
-  { name: '🎁 Pack Construtor', price: 10.00, command: 'packconstrutor {username}' },
-  { name: '🎁 Pack PvP', price: 15.00, command: 'packpvp {username}' },
+  // ========== PACOTES ==========
+  { name: '🎁 Pack Diamante', price: 12.00, command: 'packdiamante {username}', category: 'Pacotes' },
+  { name: '🎁 Pack Construtor', price: 10.00, command: 'packconstrutor {username}', category: 'Pacotes' },
+  { name: '🎁 Pack PvP', price: 15.00, command: 'packpvp {username}', category: 'Pacotes' },
   
-  // ========== CHAVES INDIVIDUAIS (usam Skript) ==========
-  { name: '🔑 Chave Comum', price: 1.50, command: 'chavescomum {username} 1' },
-  { name: '🔑 Chave Rara', price: 3.50, command: 'chavesrara {username} 1' },
-  { name: '🔑 Chave Épica', price: 5.50, command: 'chavesepica {username} 1' },
-  { name: '🔑 Chave Superior', price: 7.00, command: 'chavessuperior {username} 1' },
+  // ========== CHAVES INDIVIDUAIS ==========
+  { name: '🔑 Chave Comum', price: 1.50, command: 'chavescomum {username} 1', category: 'Chaves' },
+  { name: '🔑 Chave Rara', price: 3.50, command: 'chavesrara {username} 1', category: 'Chaves' },
+  { name: '🔑 Chave Épica', price: 5.50, command: 'chavesepica {username} 1', category: 'Chaves' },
+  { name: '🔑 Chave Superior', price: 7.00, command: 'chavessuperior {username} 1', category: 'Chaves' },
   
-  // ========== PACOTES DE CHAVES (usam Skript) ==========
-  { name: '📦 Pacote Comum 5x', price: 6.00, command: 'chavescomum {username} 5' },
-  { name: '📦 Pacote Raro 3x', price: 9.00, command: 'chavesrara {username} 3' },
-  { name: '📦 Pacote Épico 2x', price: 9.00, command: 'chavesepica {username} 2' },
-  { name: '📦 Pacote Superior 2x', price: 12.00, command: 'chavessuperior {username} 2' },
+  // ========== PACOTES DE CHAVES ==========
+  { name: '📦 Pacote Comum 5x', price: 6.00, command: 'chavescomum {username} 5', category: 'Chaves' },
+  { name: '📦 Pacote Raro 3x', price: 9.00, command: 'chavesrara {username} 3', category: 'Chaves' },
+  { name: '📦 Pacote Épico 2x', price: 9.00, command: 'chavesepica {username} 2', category: 'Chaves' },
+  { name: '📦 Pacote Superior 2x', price: 12.00, command: 'chavessuperior {username} 2', category: 'Chaves' },
   
-  // ========== MEGA PACOTE (usam Skript) ==========
-  { name: '🎁 Mega Pacote de Chaves', price: 25.00, command: 'megapack {username}' },
+  // ========== MEGA PACOTE ==========
+  { name: '🎁 Mega Pacote de Chaves', price: 0.01, command: 'megapack {username}', category: 'Chaves' },
 ];
 
 async function seedProducts() {
   console.log('🔄 Iniciando seed automático de produtos...');
   
   try {
+    // Verificar se já existem produtos
     const checkResult = await pool.query('SELECT COUNT(*) FROM products');
     const count = parseInt(checkResult.rows[0].count);
     
@@ -79,11 +80,11 @@ async function seedProducts() {
       try {
         const id = uuidv4();
         await pool.query(
-          `INSERT INTO products (id, name, price, command) 
-           VALUES ($1, $2, $3, $4)`,
-          [id, product.name, product.price, product.command]
+          `INSERT INTO products (id, name, price, command, category) 
+           VALUES ($1, $2, $3, $4, $5)`,
+          [id, product.name, product.price, product.command, product.category]
         );
-        console.log(`✅ ${product.name} - R$ ${product.price.toFixed(2)}`);
+        console.log(`✅ ${product.name} - R$ ${product.price.toFixed(2)} (${product.category})`);
         added++;
       } catch (error) {
         console.error(`❌ Erro ao adicionar ${product.name}:`, error.message);
