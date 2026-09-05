@@ -28,7 +28,8 @@ const query = promisify(db.all.bind(db));
         amount REAL,
         status TEXT,
         command TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        delivered_at DATETIME
       )
     `);
     console.log('📦 Banco de dados inicializado com sucesso!');
@@ -207,9 +208,68 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// ========== NOVAS ROTAS PARA O PLUGIN ==========
+
+// ROTA: Buscar compras pendentes de um jogador
+app.get('/api/purchases/pending', async (req, res) => {
+  try {
+    const { username } = req.query;
+    
+    if (!username) {
+      return res.status(400).json({ error: 'Username não informado' });
+    }
+
+    const payments = await query(
+      `SELECT * FROM payments 
+       WHERE minecraft_username = ? 
+       AND status = 'pending' 
+       ORDER BY created_at DESC`,
+      [username]
+    );
+
+    res.json(payments);
+  } catch (error) {
+    console.error('❌ Erro ao buscar compras pendentes:', error);
+    res.status(500).json({ error: 'Erro ao buscar compras' });
+  }
+});
+
+// ROTA: Marcar compra como entregue
+app.post('/api/purchases/deliver', async (req, res) => {
+  try {
+    const { purchaseId } = req.body;
+    
+    if (!purchaseId) {
+      return res.status(400).json({ error: 'ID da compra não informado' });
+    }
+
+    const payments = await query(
+      'SELECT * FROM payments WHERE id = ? AND status = ?',
+      [purchaseId, 'pending']
+    );
+
+    if (!payments || payments.length === 0) {
+      return res.status(404).json({ error: 'Compra não encontrada ou já entregue' });
+    }
+
+    await run(
+      `UPDATE payments 
+       SET status = 'delivered', delivered_at = CURRENT_TIMESTAMP 
+       WHERE id = ?`,
+      [purchaseId]
+    );
+
+    res.json({ success: true, message: 'Compra marcada como entregue' });
+  } catch (error) {
+    console.error('❌ Erro ao marcar compra como entregue:', error);
+    res.status(500).json({ error: 'Erro ao marcar compra' });
+  }
+});
+
 // ========== INICIAR SERVIDOR ==========
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 API rodando em http://0.0.0.0:${PORT}`);
   console.log(`📦 Banco: database.sqlite`);
   console.log(`📦 Produtos disponíveis: ${Object.keys(PRODUCTS).join(', ')}`);
+  console.log(`✅ Novos endpoints para plugin: /api/purchases/pending e /api/purchases/deliver`);
 });
