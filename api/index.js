@@ -147,8 +147,7 @@ app.get('/api/products', authMiddleware, async (req, res) => {
   }
 });
 
-// ========== ROTAS DE COMPATIBILIDADE (para o plugin antigo) ==========
-
+// ========== ROTAS DE COMPATIBILIDADE (para plugin antigo) ==========
 app.get('/api/purchases/pending', authMiddleware, async (req, res) => {
   try {
     const { username } = req.query;
