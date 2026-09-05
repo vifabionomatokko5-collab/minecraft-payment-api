@@ -5,6 +5,61 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Checkout - Miragem Store</title>
     <link rel="stylesheet" href="/css/style.css">
+    <style>
+        .coupon-container {
+            display: flex;
+            gap: 10px;
+            margin: 15px 0;
+        }
+        .coupon-container input {
+            flex: 1;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #0f3460;
+            background: #1a1a2e;
+            color: #fff;
+            font-size: 1rem;
+            text-transform: uppercase;
+        }
+        .coupon-container input:focus {
+            outline: none;
+            border-color: #ff6b00;
+        }
+        .coupon-container button {
+            background: #0f3460;
+            color: #fff;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.3s;
+        }
+        .coupon-container button:hover {
+            background: #1a4a7a;
+        }
+        .coupon-applied {
+            background: #00ff88;
+            color: #1a1a2e;
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        .coupon-error {
+            background: #ff4444;
+            color: #fff;
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+            margin: 10px 0;
+        }
+        .discount-info {
+            color: #00ff88;
+            font-size: 0.9rem;
+        }
+    </style>
 </head>
 <body>
     <header>
@@ -20,8 +75,19 @@
                 <p style="color:#666;text-align:center;">Carregando...</p>
             </div>
 
+            <!-- ========== CUPOM ========== -->
+            <div style="margin:15px 0;">
+                <label style="color:#aaa;">🎫 Cupom de desconto</label>
+                <div class="coupon-container">
+                    <input type="text" id="coupon-input" placeholder="Digite o código do cupom" maxlength="20">
+                    <button onclick="applyCoupon()">Aplicar</button>
+                </div>
+                <div id="coupon-message"></div>
+            </div>
+
             <div style="text-align:center;font-size:1.5rem;color:#ff6b00;font-weight:bold;margin:15px 0;">
                 Total: <span id="total-amount">R$ 0.00</span>
+                <div id="discount-display" style="font-size:0.9rem;color:#00ff88;"></div>
             </div>
 
             <form id="payment-form">
@@ -53,7 +119,65 @@
         let items = [];
         let total = 0;
         let loadedItems = 0;
+        let appliedCoupon = null;
+        let discountAmount = 0;
+        let finalTotal = 0;
 
+        // ========== APLICAR CUPOM ==========
+        async function applyCoupon() {
+            const input = document.getElementById('coupon-input');
+            const code = input.value.trim().toUpperCase();
+            const messageDiv = document.getElementById('coupon-message');
+            
+            if (!code) {
+                messageDiv.innerHTML = '<div class="coupon-error">Digite um código de cupom!</div>';
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/coupons/validate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code, amount: total })
+                });
+
+                const data = await response.json();
+
+                if (data.valid) {
+                    appliedCoupon = data;
+                    discountAmount = data.discount_amount;
+                    finalTotal = data.final_amount;
+                    
+                    messageDiv.innerHTML = `
+                        <div class="coupon-applied">
+                            ✅ Cupom ${data.code} aplicado! 
+                            Desconto: ${data.discount_type === 'percentage' ? `${data.discount_value}%` : `R$ ${data.discount_amount.toFixed(2)}`}
+                            <br>Total com desconto: R$ ${data.final_amount.toFixed(2)}
+                        </div>
+                    `;
+                    
+                    document.getElementById('discount-display').innerHTML = `
+                        <span class="discount-info">
+                            🎫 Cupom: ${data.code} - Desconto de R$ ${data.discount_amount.toFixed(2)}
+                        </span>
+                    `;
+                    
+                    updateTotalDisplay();
+                } else {
+                    messageDiv.innerHTML = `<div class="coupon-error">❌ ${data.error || 'Cupom inválido!'}</div>`;
+                    appliedCoupon = null;
+                    discountAmount = 0;
+                    finalTotal = total;
+                    document.getElementById('discount-display').innerHTML = '';
+                    updateTotalDisplay();
+                }
+            } catch (error) {
+                console.error('Erro ao validar cupom:', error);
+                messageDiv.innerHTML = '<div class="coupon-error">❌ Erro ao validar cupom. Tente novamente.</div>';
+            }
+        }
+
+        // ========== RENDERIZAR RESUMO ==========
         function renderSummary() {
             const container = document.getElementById('order-summary');
             total = 0;
@@ -74,10 +198,22 @@
                 `;
             }).join('');
 
-            document.getElementById('total-amount').textContent = `R$ ${total.toFixed(2)}`;
+            finalTotal = total;
+            updateTotalDisplay();
         }
 
-        // Carregar produtos do carrinho
+        function updateTotalDisplay() {
+            const display = document.getElementById('total-amount');
+            if (appliedCoupon) {
+                display.textContent = `R$ ${finalTotal.toFixed(2)}`;
+                display.style.color = '#00ff88';
+            } else {
+                display.textContent = `R$ ${total.toFixed(2)}`;
+                display.style.color = '#ff6b00';
+            }
+        }
+
+        // ========== CARREGAR PRODUTOS ==========
         if (itemsParam) {
             const pairs = itemsParam.split(',');
             const totalItems = pairs.length;
@@ -110,6 +246,7 @@
             renderSummary();
         }
 
+        // ========== ENVIAR PAGAMENTO ==========
         document.getElementById('payment-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             
@@ -130,17 +267,26 @@
             btn.disabled = true;
 
             try {
-                // Criar pagamento para cada item no carrinho
+                // Criar pagamento para cada item com o cupom
                 const paymentPromises = [];
                 for (const item of items) {
                     for (let i = 0; i < item.qty; i++) {
+                        let productId = item.id;
+                        let couponCode = appliedCoupon ? appliedCoupon.code : null;
+                        
+                        // Se tem cupom, só aplica no primeiro item
+                        if (couponCode && i > 0) {
+                            couponCode = null;
+                        }
+                        
                         const promise = fetch('/api/payment/create', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 userId: 'web_' + Date.now(),
                                 username: username,
-                                productId: item.id
+                                productId: productId,
+                                couponCode: couponCode
                             })
                         }).then(res => res.json());
                         paymentPromises.push(promise);
@@ -149,7 +295,6 @@
 
                 const responses = await Promise.all(paymentPromises);
                 
-                // Verificar se todos foram bem sucedidos
                 const failed = responses.find(r => !r.success);
                 if (failed) {
                     alert('❌ Erro ao criar pagamento: ' + (failed.error || 'Tente novamente'));
@@ -158,7 +303,6 @@
                     return;
                 }
 
-                // Mostrar o primeiro QR Code
                 const first = responses[0];
                 document.getElementById('payment-result').style.display = 'block';
                 document.getElementById('qr-code').src = first.qrCode;
@@ -166,10 +310,8 @@
                 document.getElementById('payment-status').textContent = '⏳ Aguardando pagamento...';
                 document.getElementById('payment-status').className = 'pending';
 
-                // Verificar status de todos os pagamentos
                 let attempts = 0;
                 const maxAttempts = 120;
-                let allDelivered = false;
 
                 const interval = setInterval(async () => {
                     attempts++;
@@ -180,7 +322,7 @@
                         );
                         const statuses = await Promise.all(statusPromises);
                         
-                        allDelivered = statuses.every(s => s.status === 'delivered');
+                        const allDelivered = statuses.every(s => s.status === 'delivered');
                         
                         if (allDelivered) {
                             document.getElementById('payment-status').textContent = '✅ Todos os itens entregues!';
@@ -210,6 +352,7 @@
             }
         });
 
+        // ========== COPIAR PIX ==========
         async function copiarPix() {
             const pix = document.getElementById('pix-code').value;
             try {
