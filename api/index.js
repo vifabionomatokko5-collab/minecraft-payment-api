@@ -147,6 +147,53 @@ app.get('/api/products', authMiddleware, async (req, res) => {
   }
 });
 
+// ========== ROTAS DE COMPATIBILIDADE (para o plugin antigo) ==========
+
+app.get('/api/purchases/pending', authMiddleware, async (req, res) => {
+  try {
+    const { username } = req.query;
+    
+    if (!username) {
+      return res.status(400).json({ error: 'Username não informado' });
+    }
+
+    const result = await query(
+      `SELECT * FROM payments 
+       WHERE minecraft_username = $1 
+       AND status = 'pending' 
+       ORDER BY created_at DESC`,
+      [username]
+    );
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error('❌ Erro ao buscar compras pendentes:', error);
+    res.status(500).json({ error: 'Erro ao buscar compras' });
+  }
+});
+
+app.post('/api/purchases/deliver', authMiddleware, async (req, res) => {
+  try {
+    const { purchaseId } = req.body;
+    
+    if (!purchaseId) {
+      return res.status(400).json({ error: 'ID da compra não informado' });
+    }
+
+    await query(
+      `UPDATE payments 
+       SET status = 'delivered', delivered_at = CURRENT_TIMESTAMP 
+       WHERE id = $1 AND status = 'pending'`,
+      [purchaseId]
+    );
+
+    res.json({ success: true, message: 'Compra marcada como entregue' });
+  } catch (error) {
+    console.error('❌ Erro ao marcar compra:', error);
+    res.status(500).json({ error: 'Erro ao marcar compra' });
+  }
+});
+
 // ========== INICIAR SERVIDOR ==========
 app.listen(PORT, '0.0.0.0', async () => {
   console.log(`🚀 API + Site rodando em http://0.0.0.0:${PORT}`);
