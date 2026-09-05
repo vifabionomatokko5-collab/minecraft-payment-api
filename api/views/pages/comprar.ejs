@@ -3,12 +3,42 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Comprar - MinePay</title>
-    <link rel="stylesheet" href="/css/style.css">
+    <title>Comprar - Miragem Store</title>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; font-family:system-ui,sans-serif; }
+        body { background:#1a1a2e; color:#fff; min-height:100vh; }
+        header { background:#16213e; padding:20px; text-align:center; border-bottom:2px solid #ff6b00; }
+        header h1 { font-size:2rem; color:#ff6b00; }
+        .btn-back { display:inline-block; color:#ff6b00; text-decoration:none; margin:10px 0; }
+        .btn-back:hover { text-decoration:underline; }
+        main { max-width:500px; margin:40px auto; padding:0 20px; }
+        .payment-container { background:#16213e; border-radius:12px; padding:30px; border:1px solid #ff6b00; }
+        .product-info { text-align:center; margin-bottom:30px; }
+        .product-info h2 { font-size:1.5rem; }
+        .product-info .price { font-size:2rem; color:#ff6b00; font-weight:bold; }
+        .form-group { margin:20px 0; }
+        .form-group label { display:block; margin-bottom:8px; color:#aaa; }
+        .form-group input { width:100%; padding:12px; border-radius:8px; border:1px solid #ff6b00; background:#1a1a2e; color:#fff; font-size:1rem; }
+        .form-group input:focus { outline:none; border-color:#ff8c00; }
+        .btn-pay { width:100%; background:#ff6b00; color:#fff; padding:14px; border:none; border-radius:8px; font-weight:bold; font-size:1.1rem; cursor:pointer; transition:0.2s; }
+        .btn-pay:hover { background:#ff8c00; }
+        #payment-result { margin-top:30px; padding-top:20px; border-top:1px solid #ff6b00; text-align:center; }
+        #payment-result h3 { color:#ff6b00; margin-bottom:15px; }
+        #qr-code { width:200px; height:200px; margin:10px auto; display:block; background:#fff; padding:10px; border-radius:8px; }
+        #pix-code { width:100%; padding:12px; border-radius:8px; background:#1a1a2e; color:#fff; border:1px solid #ff6b00; margin:10px 0; resize:vertical; font-size:0.8rem; word-break:break-all; }
+        .btn-copy { background:#ff6b00; color:#fff; padding:10px 25px; border:none; border-radius:8px; font-size:1rem; cursor:pointer; transition:0.2s; }
+        .btn-copy:hover { background:#ff8c00; }
+        #payment-status { margin-top:15px; font-size:1.1rem; padding:10px; border-radius:8px; }
+        #payment-status.pending { color:#ffaa00; background:#2a1a00; }
+        #payment-status.delivered { color:#00ff88; background:#001a0a; }
+        #payment-status.error { color:#ff4444; background:#1a0000; }
+        footer { text-align:center; padding:30px; color:#666; margin-top:40px; border-top:1px solid #ff6b00; }
+        @media(max-width:600px){ .payment-container { padding:20px; } }
+    </style>
 </head>
 <body>
     <header>
-        <h1>🛒 Pagamento</h1>
+        <h1>🛒 Miragem Store</h1>
         <a href="/" class="btn-back">← Voltar para a loja</a>
     </header>
 
@@ -27,35 +57,29 @@
                 <button type="submit" class="btn-pay">💰 Gerar PIX</button>
             </form>
 
-            <div id="payment-result" style="display: none;">
+            <div id="payment-result" style="display:none;">
                 <h3>📲 Escaneie o QR Code</h3>
                 <img id="qr-code" src="" alt="QR Code PIX">
-                
-                <p style="margin: 15px 0 5px;">Ou copie o código abaixo:</p>
+                <p style="margin:15px 0 5px;">Ou copie o código abaixo:</p>
                 <textarea id="pix-code" readonly></textarea>
-                
                 <button onclick="copiarPix()" class="btn-copy">📋 Copiar Código</button>
-                
                 <div id="payment-status" class="pending">⏳ Aguardando pagamento...</div>
             </div>
         </div>
     </main>
 
     <footer>
-        <p>© 2026 MinePay - Todos os direitos reservados</p>
+        <p>© 2026 <strong>Miragem Store</strong> - Todos os direitos reservados</p>
+        <p style="font-size:0.8rem; color:#444; margin-top:5px;">Powered by MinePay</p>
     </footer>
 
     <script>
         document.getElementById('payment-form').addEventListener('submit', async (e) => {
             e.preventDefault();
-            
             const username = document.getElementById('username').value.trim();
             const productId = '<%= product.id %>';
             
-            if (!username) {
-                alert('Por favor, digite seu nickname no Minecraft!');
-                return;
-            }
+            if (!username) { alert('Digite seu nickname!'); return; }
             
             const btn = document.querySelector('.btn-pay');
             btn.textContent = '🔄 Gerando...';
@@ -65,11 +89,7 @@
                 const response = await fetch('/api/payment/create', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        userId: 'web_' + Date.now(),
-                        username: username,
-                        productId: productId
-                    })
+                    body: JSON.stringify({ userId: 'web_' + Date.now(), username, productId })
                 });
                 
                 const data = await response.json();
@@ -82,37 +102,28 @@
                     document.getElementById('payment-status').className = 'pending';
                     
                     let attempts = 0;
-                    const maxAttempts = 120;
-                    
                     const interval = setInterval(async () => {
                         attempts++;
-                        
                         try {
                             const statusResponse = await fetch('/api/payment/' + data.paymentId);
                             const statusData = await statusResponse.json();
-                            
                             if (statusData.status === 'delivered') {
-                                document.getElementById('payment-status').textContent = '✅ Pagamento confirmado! Item entregue no Minecraft!';
+                                document.getElementById('payment-status').textContent = '✅ Pagamento confirmado! Item entregue!';
                                 document.getElementById('payment-status').className = 'delivered';
                                 clearInterval(interval);
                                 document.getElementById('payment-form').style.display = 'none';
-                            } else if (attempts >= maxAttempts) {
-                                document.getElementById('payment-status').textContent = '⏰ Tempo esgotado. Se pagou, aguarde alguns minutos.';
+                            } else if (attempts >= 120) {
+                                document.getElementById('payment-status').textContent = '⏰ Tempo esgotado. Se pagou, aguarde.';
                                 document.getElementById('payment-status').className = 'error';
                                 clearInterval(interval);
-                            } else {
-                                document.getElementById('payment-status').textContent = `⏳ Aguardando pagamento... (${Math.round(attempts * 5 / 60)}min)`;
                             }
-                        } catch (error) {
-                            console.error('Erro ao verificar status:', error);
-                        }
+                        } catch (error) { console.error(error); }
                     }, 5000);
                 } else {
-                    alert('❌ Erro ao gerar pagamento: ' + (data.error || 'Tente novamente'));
+                    alert('❌ Erro: ' + (data.error || 'Tente novamente'));
                 }
             } catch (error) {
-                console.error('Erro:', error);
-                alert('❌ Erro ao processar seu pedido. Tente novamente.');
+                alert('❌ Erro ao processar seu pedido.');
             } finally {
                 btn.textContent = '💰 Gerar PIX';
                 btn.disabled = false;
@@ -126,9 +137,7 @@
                 const btn = document.querySelector('.btn-copy');
                 btn.textContent = '✅ Copiado!';
                 setTimeout(() => btn.textContent = '📋 Copiar Código', 3000);
-            } catch (error) {
-                alert('Selecione o código e copie manualmente.');
-            }
+            } catch { alert('Selecione o código e copie manualmente.'); }
         }
     </script>
 </body>
