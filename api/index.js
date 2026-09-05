@@ -63,6 +63,26 @@ const query = promisify(db.all.bind(db));
       )
     `);
     
+    // ========== TABELAS DO SISTEMA DE LINK ==========
+    await run(`
+      CREATE TABLE IF NOT EXISTS link_codes (
+        code TEXT PRIMARY KEY,
+        discord_id TEXT,
+        minecraft_username TEXT,
+        status TEXT DEFAULT 'pending',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        expires_at DATETIME DEFAULT (datetime('now', '+5 minutes'))
+      )
+    `);
+
+    await run(`
+      CREATE TABLE IF NOT EXISTS linked_accounts (
+        discord_id TEXT PRIMARY KEY,
+        minecraft_username TEXT UNIQUE,
+        linked_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    
     console.log('📦 Banco de dados inicializado com sucesso!');
   } catch (error) {
     console.error('❌ Erro ao criar tabelas:', error);
@@ -99,7 +119,7 @@ const authMiddleware = (req, res, next) => {
 
 // ========== ROTAS DO SITE ==========
 
-// Página inicial (loja)
+// Página inicial
 app.get('/', async (req, res) => {
   try {
     const products = await query('SELECT * FROM products WHERE active = 1 ORDER BY created_at DESC');
@@ -134,7 +154,7 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// ROTA: Verificar status do pagamento
+// ROTA: Verificar status
 app.get('/api/payment/:paymentId', async (req, res) => {
   try {
     const { paymentId } = req.params;
@@ -146,7 +166,6 @@ app.get('/api/payment/:paymentId', async (req, res) => {
 
     res.json({ success: true, status: payments[0].status });
   } catch (error) {
-    console.error('❌ Erro ao buscar status:', error);
     res.status(500).json({ error: 'Erro ao buscar status' });
   }
 });
@@ -159,7 +178,6 @@ app.get('/api/products', authMiddleware, async (req, res) => {
     const products = await query('SELECT * FROM products WHERE active = 1 ORDER BY created_at DESC');
     res.json(products);
   } catch (error) {
-    console.error('❌ Erro ao buscar produtos:', error);
     res.status(500).json({ error: 'Erro ao buscar produtos' });
   }
 });
@@ -173,21 +191,14 @@ app.post('/api/products', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Nome, preço e comando são obrigatórios' });
     }
     
-    // Validar preço
-    const priceNum = parseFloat(price);
-    if (isNaN(priceNum) || priceNum <= 0) {
-      return res.status(400).json({ error: 'Preço inválido' });
-    }
-    
     const id = uuidv4();
     await run(
       'INSERT INTO products (id, name, price, command) VALUES (?, ?, ?, ?)',
-      [id, name, priceNum, command]
+      [id, name, price, command]
     );
     
-    res.json({ success: true, id, name, price: priceNum, command });
+    res.json({ success: true, id, name, price, command });
   } catch (error) {
-    console.error('❌ Erro ao adicionar produto:', error);
     res.status(500).json({ error: 'Erro ao adicionar produto' });
   }
 });
@@ -199,7 +210,6 @@ app.delete('/api/products/:id', authMiddleware, async (req, res) => {
     await run('UPDATE products SET active = 0 WHERE id = ?', [id]);
     res.json({ success: true });
   } catch (error) {
-    console.error('❌ Erro ao remover produto:', error);
     res.status(500).json({ error: 'Erro ao remover produto' });
   }
 });
@@ -208,11 +218,6 @@ app.delete('/api/products/:id', authMiddleware, async (req, res) => {
 app.post('/api/payment/create', authMiddleware, async (req, res) => {
   try {
     const { userId, username, productId } = req.body;
-    
-    // Validar campos
-    if (!userId || !username || !productId) {
-      return res.status(400).json({ error: 'userId, username e productId são obrigatórios' });
-    }
     
     const products = await query('SELECT * FROM products WHERE id = ? AND active = 1', [productId]);
     
@@ -255,12 +260,12 @@ app.post('/api/payment/create', authMiddleware, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ Erro ao criar pagamento:', error);
+    console.error('❌ Erro:', error);
     res.status(500).json({ error: 'Erro ao criar pagamento' });
   }
 });
 
-// ROTA: Webhook do Mercado Pago
+// ROTA: Webhook
 app.post('/api/webhook/mercadopago', async (req, res) => {
   try {
     console.log('📨 Webhook recebido!');
@@ -315,7 +320,7 @@ app.post('/api/webhook/mercadopago', async (req, res) => {
   }
 });
 
-// ========== ROTAS DO PLUGIN MINECRAFT ==========
+// ========== ROTAS DO PLUGIN ==========
 
 // ROTA: Buscar compras pendentes
 app.get('/api/purchases/pending', authMiddleware, async (req, res) => {
@@ -350,16 +355,12 @@ app.post('/api/purchases/deliver', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'ID da compra não informado' });
     }
 
-    const result = await run(
+    await run(
       `UPDATE payments 
        SET status = 'delivered', delivered_at = CURRENT_TIMESTAMP 
        WHERE id = ? AND status = 'pending'`,
       [purchaseId]
     );
-
-    if (result.changes === 0) {
-      return res.status(404).json({ error: 'Compra não encontrada ou já entregue' });
-    }
 
     res.json({ success: true, message: 'Compra marcada como entregue' });
   } catch (error) {
@@ -370,7 +371,7 @@ app.post('/api/purchases/deliver', authMiddleware, async (req, res) => {
 
 // ========== ROTAS DE CONFIGURAÇÃO DO SERVIDOR ==========
 
-// ROTA: Salvar configuração do servidor
+// ROTA: Salvar configuração
 app.post('/api/guild/settings', authMiddleware, async (req, res) => {
   try {
     const { guildId, channelId, messageId } = req.body;
@@ -392,7 +393,7 @@ app.post('/api/guild/settings', authMiddleware, async (req, res) => {
   }
 });
 
-// ROTA: Buscar configuração do servidor
+// ROTA: Buscar configuração
 app.get('/api/guild/settings/:guildId', authMiddleware, async (req, res) => {
   try {
     const { guildId } = req.params;
@@ -413,11 +414,106 @@ app.get('/api/guild/settings/:guildId', authMiddleware, async (req, res) => {
   }
 });
 
+// ========== SISTEMA DE LINK ==========
+
+// ROTA: Gerar código
+app.post('/api/link/generate', authMiddleware, async (req, res) => {
+  try {
+    const { username } = req.body;
+    
+    const existing = await query('SELECT * FROM linked_accounts WHERE minecraft_username = ?', [username]);
+    if (existing && existing.length > 0) {
+      return res.status(400).json({ error: 'Conta já linkada!' });
+    }
+    
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let code = '';
+    for (let i = 0; i < 6; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+      if (i === 2) code += '-';
+    }
+    
+    await run(
+      'INSERT INTO link_codes (code, minecraft_username) VALUES (?, ?)',
+      [code, username]
+    );
+    
+    res.json({ success: true, code });
+  } catch (error) {
+    console.error('❌ Erro ao gerar código:', error);
+    res.status(500).json({ error: 'Erro ao gerar código' });
+  }
+});
+
+// ROTA: Buscar código
+app.get('/api/link/code/:code', authMiddleware, async (req, res) => {
+  try {
+    const { code } = req.params;
+    const codes = await query(
+      'SELECT * FROM link_codes WHERE code = ? AND status = "pending" AND expires_at > datetime("now")',
+      [code]
+    );
+    
+    if (!codes || codes.length === 0) {
+      return res.status(404).json({ error: 'Código inválido ou expirado' });
+    }
+    
+    res.json({ minecraft_username: codes[0].minecraft_username });
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao buscar código' });
+  }
+});
+
+// ROTA: Verificar código
+app.post('/api/link/verify', authMiddleware, async (req, res) => {
+  try {
+    const { code, discordId, username } = req.body;
+    
+    const codes = await query(
+      'SELECT * FROM link_codes WHERE code = ? AND status = "pending" AND expires_at > datetime("now")',
+      [code]
+    );
+    
+    if (!codes || codes.length === 0) {
+      return res.status(404).json({ error: 'Código inválido ou expirado' });
+    }
+    
+    if (codes[0].minecraft_username !== username) {
+      return res.status(400).json({ error: 'Username não confere' });
+    }
+    
+    await run('UPDATE link_codes SET status = "used", discord_id = ? WHERE code = ?', [discordId, code]);
+    await run(
+      'INSERT OR REPLACE INTO linked_accounts (discord_id, minecraft_username) VALUES (?, ?)',
+      [discordId, username]
+    );
+    
+    res.json({ success: true, username });
+  } catch (error) {
+    console.error('❌ Erro ao verificar código:', error);
+    res.status(500).json({ error: 'Erro ao verificar código' });
+  }
+});
+
+// ROTA: Verificar link
+app.get('/api/link/check/:discordId', authMiddleware, async (req, res) => {
+  try {
+    const { discordId } = req.params;
+    const links = await query('SELECT * FROM linked_accounts WHERE discord_id = ?', [discordId]);
+    res.json({ 
+      linked: links && links.length > 0, 
+      username: links?.[0]?.minecraft_username,
+      linked_at: links?.[0]?.linked_at
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao verificar link' });
+  }
+});
+
 // ========== INICIAR SERVIDOR ==========
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 API + Site rodando em http://0.0.0.0:${PORT}`);
   console.log(`📦 Banco: database.sqlite`);
   console.log(`🔒 Rotas protegidas com token`);
-  console.log(`📌 Rotas de configuração: /api/guild/settings`);
   console.log(`🌐 Site disponível em: https://minecraft-payment-api.onrender.com`);
 });
