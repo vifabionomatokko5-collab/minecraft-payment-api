@@ -18,13 +18,15 @@ const query = promisify(db.all.bind(db));
 
 (async () => {
   try {
+    // Tabela de pagamentos
     await run(`
       CREATE TABLE IF NOT EXISTS payments (
         id TEXT PRIMARY KEY,
         mercadopago_id TEXT UNIQUE,
         discord_user_id TEXT,
         minecraft_username TEXT,
-        product TEXT,
+        product_id TEXT,
+        product_name TEXT,
         amount REAL,
         status TEXT,
         command TEXT,
@@ -32,9 +34,32 @@ const query = promisify(db.all.bind(db));
         delivered_at DATETIME
       )
     `);
+    
+    // Tabela de produtos
+    await run(`
+      CREATE TABLE IF NOT EXISTS products (
+        id TEXT PRIMARY KEY,
+        name TEXT UNIQUE,
+        price REAL,
+        command TEXT,
+        active INTEGER DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    
+    // Tabela de configurações do servidor
+    await run(`
+      CREATE TABLE IF NOT EXISTS guild_settings (
+        guild_id TEXT PRIMARY KEY,
+        channel_id TEXT,
+        message_id TEXT,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    
     console.log('📦 Banco de dados inicializado com sucesso!');
   } catch (error) {
-    console.error('❌ Erro ao criar tabela:', error);
+    console.error('❌ Erro ao criar tabelas:', error);
   }
 })();
 
@@ -43,30 +68,6 @@ const client = new MercadoPagoConfig({
   accessToken: process.env.MERCADO_PAGO_ACCESS_TOKEN || ''
 });
 const payment = new Payment(client);
-
-// ========== PRODUTOS ==========
-const PRODUCTS = {
-  'dirt': { 
-    name: '🧱 1 Terra (TESTE)', 
-    price: 0.01, 
-    command: 'give {username} dirt 1' 
-  },
-  'vip': { 
-    name: '🌟 Rank VIP', 
-    price: 10, 
-    command: 'lp user {username} parent add vip' 
-  },
-  'diamonds': { 
-    name: '💎 64 Diamantes', 
-    price: 5, 
-    command: 'give {username} diamond 64' 
-  },
-  'gold': { 
-    name: '🪙 32 Ouros', 
-    price: 3, 
-    command: 'give {username} gold_ingot 32' 
-  }
-};
 
 // ========== MIDDLEWARE ==========
 app.use(cors());
@@ -92,17 +93,6 @@ const authMiddleware = (req, res, next) => {
 
 // ========== ROTAS PÚBLICAS ==========
 
-// ROTA: Listar produtos
-app.get('/api/products', (req, res) => {
-  res.json({
-    products: Object.entries(PRODUCTS).map(([id, product]) => ({
-      id,
-      name: product.name,
-      price: product.price
-    }))
-  });
-});
-
 // ROTA: Health Check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -126,16 +116,60 @@ app.get('/api/payment/:paymentId', async (req, res) => {
 
 // ========== ROTAS PROTEGIDAS ==========
 
+// ROTA: Listar produtos
+app.get('/api/products', authMiddleware, async (req, res) => {
+  try {
+    const products = await query('SELECT * FROM products WHERE active = 1 ORDER BY created_at DESC');
+    res.json(products);
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao buscar produtos' });
+  }
+});
+
+// ROTA: Adicionar produto
+app.post('/api/products', authMiddleware, async (req, res) => {
+  try {
+    const { name, price, command } = req.body;
+    
+    if (!name || !price || !command) {
+      return res.status(400).json({ error: 'Nome, preço e comando são obrigatórios' });
+    }
+    
+    const id = uuidv4();
+    await run(
+      'INSERT INTO products (id, name, price, command) VALUES (?, ?, ?, ?)',
+      [id, name, price, command]
+    );
+    
+    res.json({ success: true, id, name, price, command });
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao adicionar produto' });
+  }
+});
+
+// ROTA: Remover produto
+app.delete('/api/products/:id', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    await run('UPDATE products SET active = 0 WHERE id = ?', [id]);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao remover produto' });
+  }
+});
+
 // ROTA: Criar Pagamento
 app.post('/api/payment/create', authMiddleware, async (req, res) => {
   try {
     const { userId, username, productId } = req.body;
-    const product = PRODUCTS[productId];
-
-    if (!product) {
+    
+    const products = await query('SELECT * FROM products WHERE id = ? AND active = 1', [productId]);
+    
+    if (!products || products.length === 0) {
       return res.status(404).json({ error: 'Produto não encontrado' });
     }
-
+    
+    const product = products[0];
     const paymentId = uuidv4();
     const externalReference = `payment_${paymentId}`;
 
@@ -151,9 +185,9 @@ app.post('/api/payment/create', authMiddleware, async (req, res) => {
     });
 
     await run(
-      `INSERT INTO payments (id, mercadopago_id, discord_user_id, minecraft_username, product, amount, status, command)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [paymentId, result.id, userId, username, product.name, product.price, 'pending', product.command]
+      `INSERT INTO payments (id, mercadopago_id, discord_user_id, minecraft_username, product_id, product_name, amount, status, command)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [paymentId, result.id, userId, username, product.id, product.name, product.price, 'pending', product.command]
     );
 
     const qrResponse = await payment.get({ id: result.id });
@@ -175,7 +209,7 @@ app.post('/api/payment/create', authMiddleware, async (req, res) => {
   }
 });
 
-// ROTA: Webhook (NÃO USA AUTENTICAÇÃO - Mercado Pago não envia token)
+// ROTA: Webhook
 app.post('/api/webhook/mercadopago', async (req, res) => {
   try {
     console.log('📨 Webhook recebido!');
@@ -216,7 +250,7 @@ app.post('/api/webhook/mercadopago', async (req, res) => {
         }
 
         await run(
-          `UPDATE payments SET status = 'delivered' WHERE id = ?`,
+          `UPDATE payments SET status = 'delivered', delivered_at = CURRENT_TIMESTAMP WHERE id = ?`,
           [p.id]
         );
       }
@@ -265,19 +299,10 @@ app.post('/api/purchases/deliver', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'ID da compra não informado' });
     }
 
-    const payments = await query(
-      'SELECT * FROM payments WHERE id = ? AND status = ?',
-      [purchaseId, 'pending']
-    );
-
-    if (!payments || payments.length === 0) {
-      return res.status(404).json({ error: 'Compra não encontrada ou já entregue' });
-    }
-
     await run(
       `UPDATE payments 
        SET status = 'delivered', delivered_at = CURRENT_TIMESTAMP 
-       WHERE id = ?`,
+       WHERE id = ? AND status = 'pending'`,
       [purchaseId]
     );
 
@@ -288,10 +313,55 @@ app.post('/api/purchases/deliver', authMiddleware, async (req, res) => {
   }
 });
 
+// ========== ROTAS DE CONFIGURAÇÃO DO SERVIDOR (NOVAS!) ==========
+
+// ROTA: Salvar configuração do servidor
+app.post('/api/guild/settings', authMiddleware, async (req, res) => {
+  try {
+    const { guildId, channelId, messageId } = req.body;
+    
+    if (!guildId || !channelId) {
+      return res.status(400).json({ error: 'guildId e channelId são obrigatórios' });
+    }
+
+    await run(
+      `INSERT OR REPLACE INTO guild_settings (guild_id, channel_id, message_id, updated_at)
+       VALUES (?, ?, ?, CURRENT_TIMESTAMP)`,
+      [guildId, channelId, messageId || '']
+    );
+    
+    res.json({ success: true, message: 'Configuração salva com sucesso' });
+  } catch (error) {
+    console.error('❌ Erro ao salvar configuração:', error);
+    res.status(500).json({ error: 'Erro ao salvar configuração' });
+  }
+});
+
+// ROTA: Buscar configuração do servidor
+app.get('/api/guild/settings/:guildId', authMiddleware, async (req, res) => {
+  try {
+    const { guildId } = req.params;
+    
+    const settings = await query(
+      'SELECT * FROM guild_settings WHERE guild_id = ?',
+      [guildId]
+    );
+    
+    if (settings && settings.length > 0) {
+      res.json(settings[0]);
+    } else {
+      res.json(null);
+    }
+  } catch (error) {
+    console.error('❌ Erro ao buscar configuração:', error);
+    res.status(500).json({ error: 'Erro ao buscar configuração' });
+  }
+});
+
 // ========== INICIAR SERVIDOR ==========
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 API rodando em http://0.0.0.0:${PORT}`);
   console.log(`📦 Banco: database.sqlite`);
-  console.log(`📦 Produtos disponíveis: ${Object.keys(PRODUCTS).join(', ')}`);
   console.log(`🔒 Rotas protegidas com token`);
+  console.log(`📌 Rotas de configuração: /api/guild/settings`);
 });
