@@ -105,7 +105,7 @@ app.use(express.json());
       )
     `);
     
-    // Tabela de cupons (ATUALIZADA COM COMMAND)
+    // Tabela de cupons (COM COMMAND)
     await query(`
       CREATE TABLE IF NOT EXISTS coupons (
         id TEXT PRIMARY KEY,
