@@ -5,11 +5,17 @@ const { MercadoPagoConfig, Payment } = require('mercadopago');
 const { v4: uuidv4 } = require('uuid');
 const sqlite3 = require('sqlite3');
 const { promisify } = require('util');
+const path = require('path');
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 10000;
+
+// ========== CONFIGURAÇÃO DO SITE ==========
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, 'views/pages'));
+app.use(express.static(path.join(__dirname, 'public')));
 
 // ========== BANCO DE DADOS ==========
 const db = new sqlite3.Database('./database.sqlite');
@@ -30,9 +36,6 @@ const query = promisify(db.all.bind(db));
         amount REAL,
         status TEXT,
         command TEXT,
-        coupon_code TEXT,
-        discount REAL,
-        final_amount REAL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         delivered_at DATETIME
       )
@@ -57,17 +60,6 @@ const query = promisify(db.all.bind(db));
         channel_id TEXT,
         message_id TEXT,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-    
-    // Tabela de cupons
-    await run(`
-      CREATE TABLE IF NOT EXISTS coupons (
-        id TEXT PRIMARY KEY,
-        code TEXT UNIQUE,
-        discount INTEGER,
-        active INTEGER DEFAULT 1,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
     
@@ -105,14 +97,44 @@ const authMiddleware = (req, res, next) => {
   next();
 };
 
-// ========== ROTAS PÚBLICAS ==========
+// ========== ROTAS DO SITE ==========
+
+// Página inicial (loja)
+app.get('/', async (req, res) => {
+  try {
+    const products = await query('SELECT * FROM products WHERE active = 1 ORDER BY created_at DESC');
+    res.render('index', { products });
+  } catch (error) {
+    console.error('❌ Erro ao carregar produtos:', error);
+    res.status(500).send('Erro ao carregar produtos');
+  }
+});
+
+// Página de compra
+app.get('/comprar/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const products = await query('SELECT * FROM products WHERE id = ? AND active = 1', [id]);
+    
+    if (!products || products.length === 0) {
+      return res.status(404).send('Produto não encontrado');
+    }
+    
+    res.render('comprar', { product: products[0] });
+  } catch (error) {
+    console.error('❌ Erro ao carregar produto:', error);
+    res.status(500).send('Erro ao carregar produto');
+  }
+});
+
+// ========== ROTAS PÚBLICAS DA API ==========
 
 // ROTA: Health Check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// ROTA: Verificar status
+// ROTA: Verificar status do pagamento
 app.get('/api/payment/:paymentId', async (req, res) => {
   try {
     const { paymentId } = req.params;
@@ -124,11 +146,12 @@ app.get('/api/payment/:paymentId', async (req, res) => {
 
     res.json({ success: true, status: payments[0].status });
   } catch (error) {
+    console.error('❌ Erro ao buscar status:', error);
     res.status(500).json({ error: 'Erro ao buscar status' });
   }
 });
 
-// ========== ROTAS PROTEGIDAS ==========
+// ========== ROTAS PROTEGIDAS DA API ==========
 
 // ROTA: Listar produtos
 app.get('/api/products', authMiddleware, async (req, res) => {
@@ -136,6 +159,7 @@ app.get('/api/products', authMiddleware, async (req, res) => {
     const products = await query('SELECT * FROM products WHERE active = 1 ORDER BY created_at DESC');
     res.json(products);
   } catch (error) {
+    console.error('❌ Erro ao buscar produtos:', error);
     res.status(500).json({ error: 'Erro ao buscar produtos' });
   }
 });
@@ -149,14 +173,21 @@ app.post('/api/products', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Nome, preço e comando são obrigatórios' });
     }
     
+    // Validar preço
+    const priceNum = parseFloat(price);
+    if (isNaN(priceNum) || priceNum <= 0) {
+      return res.status(400).json({ error: 'Preço inválido' });
+    }
+    
     const id = uuidv4();
     await run(
       'INSERT INTO products (id, name, price, command) VALUES (?, ?, ?, ?)',
-      [id, name, price, command]
+      [id, name, priceNum, command]
     );
     
-    res.json({ success: true, id, name, price, command });
+    res.json({ success: true, id, name, price: priceNum, command });
   } catch (error) {
+    console.error('❌ Erro ao adicionar produto:', error);
     res.status(500).json({ error: 'Erro ao adicionar produto' });
   }
 });
@@ -168,6 +199,7 @@ app.delete('/api/products/:id', authMiddleware, async (req, res) => {
     await run('UPDATE products SET active = 0 WHERE id = ?', [id]);
     res.json({ success: true });
   } catch (error) {
+    console.error('❌ Erro ao remover produto:', error);
     res.status(500).json({ error: 'Erro ao remover produto' });
   }
 });
@@ -175,7 +207,12 @@ app.delete('/api/products/:id', authMiddleware, async (req, res) => {
 // ROTA: Criar Pagamento
 app.post('/api/payment/create', authMiddleware, async (req, res) => {
   try {
-    const { userId, username, productId, couponCode } = req.body;
+    const { userId, username, productId } = req.body;
+    
+    // Validar campos
+    if (!userId || !username || !productId) {
+      return res.status(400).json({ error: 'userId, username e productId são obrigatórios' });
+    }
     
     const products = await query('SELECT * FROM products WHERE id = ? AND active = 1', [productId]);
     
@@ -184,31 +221,13 @@ app.post('/api/payment/create', authMiddleware, async (req, res) => {
     }
     
     const product = products[0];
-    let finalPrice = product.price;
-    let discount = 0;
-    let couponCodeUsed = null;
-    
-    // Validar cupom se foi fornecido
-    if (couponCode) {
-      const coupons = await query(
-        'SELECT * FROM coupons WHERE code = ? AND active = 1',
-        [couponCode.toUpperCase()]
-      );
-      
-      if (coupons && coupons.length > 0) {
-        discount = coupons[0].discount;
-        finalPrice = product.price * (1 - discount / 100);
-        couponCodeUsed = couponCode.toUpperCase();
-      }
-    }
-    
     const paymentId = uuidv4();
     const externalReference = `payment_${paymentId}`;
 
     const result = await payment.create({
       body: {
-        transaction_amount: finalPrice,
-        description: product.name + (couponCodeUsed ? ` (CUPOM: ${couponCodeUsed})` : ''),
+        transaction_amount: product.price,
+        description: product.name,
         payment_method_id: 'pix',
         payer: { email: 'comprador@email.com' },
         external_reference: externalReference,
@@ -217,9 +236,9 @@ app.post('/api/payment/create', authMiddleware, async (req, res) => {
     });
 
     await run(
-      `INSERT INTO payments (id, mercadopago_id, discord_user_id, minecraft_username, product_id, product_name, amount, status, command, coupon_code, discount, final_amount)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [paymentId, result.id, userId, username, product.id, product.name, product.price, 'pending', product.command, couponCodeUsed, discount, finalPrice]
+      `INSERT INTO payments (id, mercadopago_id, discord_user_id, minecraft_username, product_id, product_name, amount, status, command)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [paymentId, result.id, userId, username, product.id, product.name, product.price, 'pending', product.command]
     );
 
     const qrResponse = await payment.get({ id: result.id });
@@ -231,19 +250,17 @@ app.post('/api/payment/create', authMiddleware, async (req, res) => {
       paymentId,
       qrCode,
       ticketUrl,
-      amount: finalPrice,
-      originalAmount: product.price,
-      discount: discount,
+      amount: product.price,
       product: product.name
     });
 
   } catch (error) {
-    console.error('❌ Erro:', error);
+    console.error('❌ Erro ao criar pagamento:', error);
     res.status(500).json({ error: 'Erro ao criar pagamento' });
   }
 });
 
-// ROTA: Webhook
+// ROTA: Webhook do Mercado Pago
 app.post('/api/webhook/mercadopago', async (req, res) => {
   try {
     console.log('📨 Webhook recebido!');
@@ -298,7 +315,7 @@ app.post('/api/webhook/mercadopago', async (req, res) => {
   }
 });
 
-// ========== ROTAS DO PLUGIN ==========
+// ========== ROTAS DO PLUGIN MINECRAFT ==========
 
 // ROTA: Buscar compras pendentes
 app.get('/api/purchases/pending', authMiddleware, async (req, res) => {
@@ -333,12 +350,16 @@ app.post('/api/purchases/deliver', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'ID da compra não informado' });
     }
 
-    await run(
+    const result = await run(
       `UPDATE payments 
        SET status = 'delivered', delivered_at = CURRENT_TIMESTAMP 
        WHERE id = ? AND status = 'pending'`,
       [purchaseId]
     );
+
+    if (result.changes === 0) {
+      return res.status(404).json({ error: 'Compra não encontrada ou já entregue' });
+    }
 
     res.json({ success: true, message: 'Compra marcada como entregue' });
   } catch (error) {
@@ -392,74 +413,11 @@ app.get('/api/guild/settings/:guildId', authMiddleware, async (req, res) => {
   }
 });
 
-// ========== ROTAS DE CUPONS ==========
-
-// ROTA: Listar todos os cupons
-app.get('/api/coupons', authMiddleware, async (req, res) => {
-  try {
-    const coupons = await query('SELECT * FROM coupons WHERE active = 1 ORDER BY created_at DESC');
-    res.json(coupons);
-  } catch (error) {
-    res.status(500).json({ error: 'Erro ao buscar cupons' });
-  }
-});
-
-// ROTA: Adicionar cupom
-app.post('/api/coupons', authMiddleware, async (req, res) => {
-  try {
-    const { code, discount } = req.body;
-    
-    if (!code || !discount) {
-      return res.status(400).json({ error: 'Código e desconto são obrigatórios' });
-    }
-    
-    const id = uuidv4();
-    await run(
-      'INSERT INTO coupons (id, code, discount) VALUES (?, ?, ?)',
-      [id, code.toUpperCase(), discount]
-    );
-    
-    res.json({ success: true, id, code: code.toUpperCase(), discount });
-  } catch (error) {
-    res.status(500).json({ error: 'Erro ao adicionar cupom' });
-  }
-});
-
-// ROTA: Remover cupom
-app.delete('/api/coupons/:code', authMiddleware, async (req, res) => {
-  try {
-    const { code } = req.params;
-    await run('UPDATE coupons SET active = 0 WHERE code = ?', [code.toUpperCase()]);
-    res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ error: 'Erro ao remover cupom' });
-  }
-});
-
-// ROTA: Validar cupom
-app.get('/api/coupons/validate/:code', authMiddleware, async (req, res) => {
-  try {
-    const { code } = req.params;
-    const coupons = await query(
-      'SELECT * FROM coupons WHERE code = ? AND active = 1',
-      [code.toUpperCase()]
-    );
-    
-    if (coupons && coupons.length > 0) {
-      res.json({ valid: true, discount: coupons[0].discount });
-    } else {
-      res.json({ valid: false });
-    }
-  } catch (error) {
-    res.status(500).json({ error: 'Erro ao validar cupom' });
-  }
-});
-
 // ========== INICIAR SERVIDOR ==========
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 API rodando em http://0.0.0.0:${PORT}`);
+  console.log(`🚀 API + Site rodando em http://0.0.0.0:${PORT}`);
   console.log(`📦 Banco: database.sqlite`);
   console.log(`🔒 Rotas protegidas com token`);
   console.log(`📌 Rotas de configuração: /api/guild/settings`);
-  console.log(`🏷️ Rotas de cupons: /api/coupons`);
+  console.log(`🌐 Site disponível em: https://minecraft-payment-api.onrender.com`);
 });
