@@ -1,0 +1,259 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+body {
+    background: #1a1a2e;
+    color: #fff;
+    min-height: 100vh;
+}
+
+header {
+    background: #16213e;
+    padding: 20px;
+    text-align: center;
+    border-bottom: 2px solid #0f3460;
+}
+
+header h1 {
+    font-size: 2.5rem;
+    color: #00ff88;
+}
+
+header p {
+    color: #aaa;
+    font-size: 1.1rem;
+    margin-top: 5px;
+}
+
+main {
+    max-width: 1200px;
+    margin: 40px auto;
+    padding: 0 20px;
+}
+
+.products-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 25px;
+    margin-top: 30px;
+}
+
+.product-card {
+    background: #16213e;
+    border-radius: 12px;
+    padding: 25px;
+    text-align: center;
+    border: 1px solid #0f3460;
+    transition: all 0.3s ease;
+}
+
+.product-card:hover {
+    transform: translateY(-5px);
+    border-color: #00ff88;
+    box-shadow: 0 10px 30px rgba(0, 255, 136, 0.1);
+}
+
+.product-card h3 {
+    font-size: 1.3rem;
+    margin-bottom: 10px;
+}
+
+.product-card .price {
+    font-size: 1.8rem;
+    color: #00ff88;
+    font-weight: bold;
+    margin: 15px 0;
+}
+
+.product-card .btn-buy {
+    display: inline-block;
+    background: #00ff88;
+    color: #1a1a2e;
+    padding: 12px 35px;
+    border: none;
+    border-radius: 8px;
+    font-weight: bold;
+    font-size: 1rem;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 0.2s;
+}
+
+.product-card .btn-buy:hover {
+    background: #00cc66;
+}
+
+.payment-container {
+    max-width: 500px;
+    margin: 0 auto;
+    background: #16213e;
+    border-radius: 12px;
+    padding: 30px;
+}
+
+.payment-container .product-info {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+.payment-container .product-info h2 {
+    font-size: 1.5rem;
+}
+
+.payment-container .product-info .price {
+    font-size: 2rem;
+    color: #00ff88;
+    font-weight: bold;
+}
+
+.form-group {
+    margin: 20px 0;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    color: #aaa;
+}
+
+.form-group input {
+    width: 100%;
+    padding: 12px 15px;
+    border-radius: 8px;
+    border: 1px solid #0f3460;
+    background: #1a1a2e;
+    color: #fff;
+    font-size: 1rem;
+    transition: border 0.2s;
+}
+
+.form-group input:focus {
+    outline: none;
+    border-color: #00ff88;
+}
+
+.btn-pay {
+    width: 100%;
+    background: #00ff88;
+    color: #1a1a2e;
+    padding: 14px;
+    border: none;
+    border-radius: 8px;
+    font-weight: bold;
+    font-size: 1.1rem;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-pay:hover {
+    background: #00cc66;
+}
+
+#payment-result {
+    margin-top: 30px;
+    padding-top: 20px;
+    border-top: 1px solid #0f3460;
+    text-align: center;
+}
+
+#payment-result h3 {
+    color: #00ff88;
+    margin-bottom: 15px;
+}
+
+#qr-code {
+    width: 200px;
+    height: 200px;
+    margin: 10px auto;
+    display: block;
+    background: #fff;
+    padding: 10px;
+    border-radius: 8px;
+}
+
+#pix-code {
+    width: 100%;
+    padding: 12px;
+    border-radius: 8px;
+    background: #1a1a2e;
+    color: #fff;
+    border: 1px solid #0f3460;
+    margin: 10px 0;
+    resize: vertical;
+    font-size: 0.8rem;
+    word-break: break-all;
+}
+
+.btn-copy {
+    background: #0f3460;
+    color: #fff;
+    padding: 10px 25px;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-copy:hover {
+    background: #1a4a7a;
+}
+
+#payment-status {
+    margin-top: 15px;
+    font-size: 1.1rem;
+    padding: 10px;
+    border-radius: 8px;
+}
+
+#payment-status.pending {
+    color: #ffaa00;
+    background: #2a1a00;
+}
+
+#payment-status.delivered {
+    color: #00ff88;
+    background: #001a0a;
+}
+
+#payment-status.error {
+    color: #ff4444;
+    background: #1a0000;
+}
+
+.btn-back {
+    display: inline-block;
+    color: #00ff88;
+    text-decoration: none;
+    margin: 10px 0;
+}
+
+.btn-back:hover {
+    text-decoration: underline;
+}
+
+footer {
+    text-align: center;
+    padding: 30px 20px;
+    color: #666;
+    margin-top: 40px;
+    border-top: 1px solid #0f3460;
+}
+
+@media (max-width: 600px) {
+    header h1 {
+        font-size: 1.8rem;
+    }
+    
+    .products-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .payment-container {
+        padding: 20px;
+    }
+  }
