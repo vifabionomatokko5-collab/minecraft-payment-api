@@ -20,6 +20,62 @@
         .form-group label { display:block; margin-bottom:8px; color:#aaa; }
         .form-group input { width:100%; padding:12px; border-radius:8px; border:1px solid #ff6b00; background:#1a1a2e; color:#fff; font-size:1rem; }
         .form-group input:focus { outline:none; border-color:#ff8c00; }
+
+        /* ========== CUPOM ========== */
+        .coupon-container {
+            display: flex;
+            gap: 10px;
+            margin: 15px 0;
+        }
+        .coupon-container input {
+            flex: 1;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #0f3460;
+            background: #1a1a2e;
+            color: #fff;
+            font-size: 1rem;
+            text-transform: uppercase;
+        }
+        .coupon-container input:focus {
+            outline: none;
+            border-color: #ff6b00;
+        }
+        .coupon-container button {
+            background: #0f3460;
+            color: #fff;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.3s;
+        }
+        .coupon-container button:hover {
+            background: #1a4a7a;
+        }
+        .coupon-applied {
+            background: #00ff88;
+            color: #1a1a2e;
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        .coupon-error {
+            background: #ff4444;
+            color: #fff;
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+            margin: 10px 0;
+        }
+        .discount-info {
+            color: #00ff88;
+            font-size: 0.9rem;
+        }
+
         .btn-pay { width:100%; background:#ff6b00; color:#fff; padding:14px; border:none; border-radius:8px; font-weight:bold; font-size:1.1rem; cursor:pointer; transition:0.2s; }
         .btn-pay:hover { background:#ff8c00; }
         #payment-result { margin-top:30px; padding-top:20px; border-top:1px solid #ff6b00; text-align:center; }
@@ -49,6 +105,21 @@
                 <p class="price">R$ <%= product.price.toFixed(2) %></p>
             </div>
 
+            <!-- ========== CUPOM ========== -->
+            <div style="margin:15px 0;">
+                <label style="color:#aaa;">🎫 Cupom de desconto</label>
+                <div class="coupon-container">
+                    <input type="text" id="coupon-input" placeholder="Digite o código do cupom" maxlength="20">
+                    <button onclick="applyCoupon()">Aplicar</button>
+                </div>
+                <div id="coupon-message"></div>
+            </div>
+
+            <div style="text-align:center;font-size:1rem;color:#ff6b00;font-weight:bold;margin:10px 0;">
+                Total: <span id="total-amount">R$ <%= product.price.toFixed(2) %></span>
+                <div id="discount-display" style="font-size:0.9rem;color:#00ff88;"></div>
+            </div>
+
             <form id="payment-form">
                 <div class="form-group">
                     <label for="username">🎮 Seu nickname no Minecraft</label>
@@ -74,10 +145,82 @@
     </footer>
 
     <script>
+        const productPrice = <%= product.price %>;
+        let appliedCoupon = null;
+        let discountAmount = 0;
+        let finalTotal = productPrice;
+
+        // ========== APLICAR CUPOM ==========
+        async function applyCoupon() {
+            const input = document.getElementById('coupon-input');
+            const code = input.value.trim().toUpperCase();
+            const messageDiv = document.getElementById('coupon-message');
+            
+            if (!code) {
+                messageDiv.innerHTML = '<div class="coupon-error">Digite um código de cupom!</div>';
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/coupons/validate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code, amount: productPrice })
+                });
+
+                const data = await response.json();
+
+                if (data.valid) {
+                    appliedCoupon = data;
+                    discountAmount = data.discount_amount;
+                    finalTotal = data.final_amount;
+                    
+                    messageDiv.innerHTML = `
+                        <div class="coupon-applied">
+                            ✅ Cupom ${data.code} aplicado! 
+                            Desconto: ${data.discount_type === 'percentage' ? `${data.discount_value}%` : `R$ ${data.discount_amount.toFixed(2)}`}
+                            <br>Total com desconto: R$ ${data.final_amount.toFixed(2)}
+                        </div>
+                    `;
+                    
+                    document.getElementById('discount-display').innerHTML = `
+                        <span class="discount-info">
+                            🎫 Cupom: ${data.code} - Desconto de R$ ${data.discount_amount.toFixed(2)}
+                        </span>
+                    `;
+                    
+                    updateTotalDisplay();
+                } else {
+                    messageDiv.innerHTML = `<div class="coupon-error">❌ ${data.error || 'Cupom inválido!'}</div>`;
+                    appliedCoupon = null;
+                    discountAmount = 0;
+                    finalTotal = productPrice;
+                    document.getElementById('discount-display').innerHTML = '';
+                    updateTotalDisplay();
+                }
+            } catch (error) {
+                console.error('Erro ao validar cupom:', error);
+                messageDiv.innerHTML = '<div class="coupon-error">❌ Erro ao validar cupom. Tente novamente.</div>';
+            }
+        }
+
+        function updateTotalDisplay() {
+            const display = document.getElementById('total-amount');
+            if (appliedCoupon) {
+                display.textContent = `R$ ${finalTotal.toFixed(2)}`;
+                display.style.color = '#00ff88';
+            } else {
+                display.textContent = `R$ ${productPrice.toFixed(2)}`;
+                display.style.color = '#ff6b00';
+            }
+        }
+
+        // ========== ENVIAR PAGAMENTO ==========
         document.getElementById('payment-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const username = document.getElementById('username').value.trim();
             const productId = '<%= product.id %>';
+            const couponCode = appliedCoupon ? appliedCoupon.code : null;
             
             if (!username) { alert('Digite seu nickname!'); return; }
             
@@ -89,7 +232,12 @@
                 const response = await fetch('/api/payment/create', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ userId: 'web_' + Date.now(), username, productId })
+                    body: JSON.stringify({ 
+                        userId: 'web_' + Date.now(), 
+                        username, 
+                        productId,
+                        couponCode: couponCode
+                    })
                 });
                 
                 const data = await response.json();
