@@ -49,29 +49,41 @@ app.use(express.json());
       )
     `);
     
-    // Tabela de produtos
+    // Tabela de produtos (COM DESCRIÇÃO E INCLUDES)
     await query(`
       CREATE TABLE IF NOT EXISTS products (
         id TEXT PRIMARY KEY,
         name TEXT UNIQUE,
         price REAL,
         command TEXT,
+        description TEXT,
+        includes TEXT,
+        category TEXT,
         active INTEGER DEFAULT 1,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
     
-    // Adicionar coluna category se não existir
-    const checkColumn = await query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_name='products' AND column_name='category'
-    `);
+    // Adicionar colunas se não existirem
+    try {
+      await query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS description TEXT`);
+      console.log('✅ Coluna description adicionada (se não existia)');
+    } catch (error) {
+      console.log('ℹ️ Coluna description já existe');
+    }
     
-    if (checkColumn.rows.length === 0) {
-      console.log('🔄 Adicionando coluna category...');
-      await query('ALTER TABLE products ADD COLUMN category TEXT');
-      console.log('✅ Coluna category adicionada!');
+    try {
+      await query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS includes TEXT`);
+      console.log('✅ Coluna includes adicionada (se não existia)');
+    } catch (error) {
+      console.log('ℹ️ Coluna includes já existe');
+    }
+    
+    try {
+      await query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS category TEXT`);
+      console.log('✅ Coluna category adicionada (se não existia)');
+    } catch (error) {
+      console.log('ℹ️ Coluna category já existe');
     }
     
     // Tabela de configurações do servidor (COM LOGS_CHANNEL_ID)
@@ -85,7 +97,7 @@ app.use(express.json());
       )
     `);
     
-    // Adicionar coluna logs_channel_id se não existir (para quem já tem a tabela)
+    // Adicionar coluna logs_channel_id se não existir
     try {
       await query(`
         ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS logs_channel_id TEXT
