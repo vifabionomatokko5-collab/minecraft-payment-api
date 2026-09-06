@@ -300,7 +300,7 @@ app.post('/api/coupons/validate', async (req, res) => {
        WHERE code = $1 
        AND active = 1 
        AND (expires_at IS NULL OR expires_at > NOW())
-       AND (max_uses IS NULL OR used_count < max_uses)`,
+       AND (max_uses IS NULL OR max_uses = 0 OR used_count < max_uses)`,
       [code.toUpperCase()]
     );
     
@@ -332,7 +332,8 @@ app.post('/api/coupons/validate', async (req, res) => {
       discount_amount: discount,
       final_amount: amount - discount,
       min_purchase: coupon.min_purchase,
-      command: coupon.command
+      command: coupon.command,
+      is_permanent: coupon.max_uses === null || coupon.max_uses === 0
     });
   } catch (error) {
     console.error('❌ Erro ao validar cupom:', error);
@@ -354,7 +355,7 @@ app.post('/api/coupons/use', authMiddleware, async (req, res) => {
        WHERE code = $1 
        AND active = 1 
        AND (expires_at IS NULL OR expires_at > NOW())
-       AND (max_uses IS NULL OR used_count < max_uses)`,
+       AND (max_uses IS NULL OR max_uses = 0 OR used_count < max_uses)`,
       [code.toUpperCase()]
     );
     
@@ -364,10 +365,12 @@ app.post('/api/coupons/use', authMiddleware, async (req, res) => {
     
     const coupon = result.rows[0];
     
-    await query(
-      `UPDATE coupons SET used_count = used_count + 1 WHERE code = $1`,
-      [code.toUpperCase()]
-    );
+    if (coupon.max_uses !== null && coupon.max_uses > 0) {
+      await query(
+        `UPDATE coupons SET used_count = used_count + 1 WHERE code = $1`,
+        [code.toUpperCase()]
+      );
+    }
     
     let commandExecuted = false;
     if (coupon.command) {
@@ -414,11 +417,82 @@ app.post('/api/coupons/use', authMiddleware, async (req, res) => {
       success: true, 
       message: 'Cupom usado com sucesso',
       commandExecuted,
-      command: coupon.command
+      command: coupon.command,
+      remaining_uses: coupon.max_uses !== null && coupon.max_uses > 0 ? coupon.max_uses - (coupon.used_count + 1) : '∞'
     });
   } catch (error) {
     console.error('❌ Erro ao usar cupom:', error);
     res.status(500).json({ error: 'Erro ao usar cupom' });
+  }
+});
+
+// ========== ROTAS DE ESTATÍSTICAS ==========
+
+// ROTA: Estatísticas gerais
+app.get('/api/stats', authMiddleware, async (req, res) => {
+  try {
+    const totalOrders = await query('SELECT COUNT(*) FROM payments');
+    const deliveredOrders = await query('SELECT COUNT(*) FROM payments WHERE status = $1', ['delivered']);
+    const pendingOrders = await query('SELECT COUNT(*) FROM payments WHERE status = $1', ['pending']);
+    const revenue = await query('SELECT COALESCE(SUM(amount), 0) FROM payments WHERE status = $1', ['delivered']);
+    const recentOrders = await query(
+      'SELECT * FROM payments ORDER BY created_at DESC LIMIT 10'
+    );
+    
+    res.json({
+      total_orders: parseInt(totalOrders.rows[0].count) || 0,
+      delivered_orders: parseInt(deliveredOrders.rows[0].count) || 0,
+      pending_orders: parseInt(pendingOrders.rows[0].count) || 0,
+      total_revenue: parseFloat(revenue.rows[0].coalesce) || 0,
+      recent_orders: recentOrders.rows
+    });
+  } catch (error) {
+    console.error('❌ Erro ao buscar estatísticas:', error);
+    res.status(500).json({ error: 'Erro ao buscar estatísticas' });
+  }
+});
+
+// ROTA: Logs de compras
+app.get('/api/logs', authMiddleware, async (req, res) => {
+  try {
+    const { limit = 50, page = 1 } = req.query;
+    const offset = (page - 1) * limit;
+    
+    const result = await query(
+      `SELECT * FROM payments 
+       ORDER BY created_at DESC 
+       LIMIT $1 OFFSET $2`,
+      [limit, offset]
+    );
+    
+    const total = await query('SELECT COUNT(*) FROM payments');
+    
+    res.json({
+      logs: result.rows,
+      total: parseInt(total.rows[0].count) || 0,
+      page: parseInt(page),
+      limit: parseInt(limit)
+    });
+  } catch (error) {
+    console.error('❌ Erro ao buscar logs:', error);
+    res.status(500).json({ error: 'Erro ao buscar logs' });
+  }
+});
+
+// ROTA: Log de uma compra específica
+app.get('/api/logs/:paymentId', authMiddleware, async (req, res) => {
+  try {
+    const { paymentId } = req.params;
+    const result = await query('SELECT * FROM payments WHERE id = $1', [paymentId]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Pedido não encontrado' });
+    }
+    
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('❌ Erro ao buscar log:', error);
+    res.status(500).json({ error: 'Erro ao buscar log' });
   }
 });
 
