@@ -49,7 +49,7 @@ app.use(express.json());
       )
     `);
     
-    // Tabela de produtos (COM DESCRIÇÃO E INCLUDES)
+    // Tabela de produtos
     await query(`
       CREATE TABLE IF NOT EXISTS products (
         id TEXT PRIMARY KEY,
@@ -549,6 +549,85 @@ app.get('/api/guild/logs/:guildId', authMiddleware, async (req, res) => {
   } catch (error) {
     console.error('❌ Erro ao buscar canal de logs:', error);
     res.status(500).json({ error: 'Erro ao buscar canal de logs' });
+  }
+});
+
+// ========== ROTAS PARA O SITE (STATUS E JOGADORES) ==========
+
+// ROTA: Status do servidor
+app.get('/api/server/status', async (req, res) => {
+  try {
+    const Rcon = require('rcon-client').Rcon;
+    const rcon = new Rcon({
+      host: process.env.MINECRAFT_HOST || 'localhost',
+      port: parseInt(process.env.RCON_PORT || '25575'),
+      password: process.env.RCON_PASSWORD || 'senha123'
+    });
+
+    await rcon.connect();
+    const result = await rcon.send('list');
+    await rcon.end();
+
+    // Parse do resultado: "There are 7 of a max of 100 players online: player1, player2, ..."
+    const match = result.match(/There are (\d+) of a max of (\d+) players online: (.+)/);
+    
+    if (match) {
+      const count = parseInt(match[1]);
+      const max = parseInt(match[2]);
+      const players = match[3] ? match[3].split(',').map(p => p.trim()) : [];
+      
+      res.json({
+        online: true,
+        count: count,
+        max: max,
+        players: players
+      });
+    } else {
+      res.json({
+        online: true,
+        count: 0,
+        max: 100,
+        players: []
+      });
+    }
+  } catch (error) {
+    console.error('❌ Erro ao buscar status do servidor:', error);
+    res.json({
+      online: false,
+      count: 0,
+      max: 100,
+      players: [],
+      error: 'Servidor offline ou RCON não configurado'
+    });
+  }
+});
+
+// ROTA: Apenas jogadores online (para o site)
+app.get('/api/server/players', async (req, res) => {
+  try {
+    const Rcon = require('rcon-client').Rcon;
+    const rcon = new Rcon({
+      host: process.env.MINECRAFT_HOST || 'localhost',
+      port: parseInt(process.env.RCON_PORT || '25575'),
+      password: process.env.RCON_PASSWORD || 'senha123'
+    });
+
+    await rcon.connect();
+    const result = await rcon.send('list');
+    await rcon.end();
+
+    const match = result.match(/There are (\d+) of a max of \d+ players online: (.+)/);
+    
+    if (match) {
+      const count = parseInt(match[1]);
+      const players = match[2] ? match[2].split(',').map(p => p.trim()) : [];
+      res.json({ count, players });
+    } else {
+      res.json({ count: 0, players: [] });
+    }
+  } catch (error) {
+    console.error('❌ Erro ao buscar jogadores:', error);
+    res.json({ count: 0, players: [] });
   }
 });
 
