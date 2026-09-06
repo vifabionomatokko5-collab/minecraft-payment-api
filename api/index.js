@@ -85,6 +85,16 @@ app.use(express.json());
       )
     `);
     
+    // Adicionar coluna logs_channel_id se não existir (para quem já tem a tabela)
+    try {
+      await query(`
+        ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS logs_channel_id TEXT
+      `);
+      console.log('✅ Coluna logs_channel_id adicionada (se não existia)');
+    } catch (error) {
+      console.log('ℹ️ Coluna logs_channel_id já existe ou erro ao adicionar:', error.message);
+    }
+    
     // Tabela de códigos de link
     await query(`
       CREATE TABLE IF NOT EXISTS link_codes (
