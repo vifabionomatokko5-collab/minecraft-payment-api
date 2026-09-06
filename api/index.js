@@ -74,12 +74,13 @@ app.use(express.json());
       console.log('✅ Coluna category adicionada!');
     }
     
-    // Tabela de configurações do servidor
+    // Tabela de configurações do servidor (COM LOGS_CHANNEL_ID)
     await query(`
       CREATE TABLE IF NOT EXISTS guild_settings (
         guild_id TEXT PRIMARY KEY,
         channel_id TEXT,
         message_id TEXT,
+        logs_channel_id TEXT,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -105,7 +106,7 @@ app.use(express.json());
       )
     `);
     
-    // Tabela de cupons (criação base)
+    // Tabela de cupons
     await query(`
       CREATE TABLE IF NOT EXISTS coupons (
         id TEXT PRIMARY KEY,
@@ -115,21 +116,12 @@ app.use(express.json());
         min_purchase REAL DEFAULT 0,
         max_uses INTEGER DEFAULT 1,
         used_count INTEGER DEFAULT 0,
+        command TEXT,
         expires_at TIMESTAMP,
         active INTEGER DEFAULT 1,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
-    
-    // Adicionar coluna command se não existir
-    try {
-      await query(`
-        ALTER TABLE coupons ADD COLUMN IF NOT EXISTS command TEXT
-      `);
-      console.log('✅ Coluna command adicionada (se não existia)');
-    } catch (error) {
-      console.log('ℹ️ Coluna command já existe ou erro ao adicionar:', error.message);
-    }
     
     console.log('📦 Banco de dados inicializado com sucesso!');
     
@@ -493,6 +485,48 @@ app.get('/api/logs/:paymentId', authMiddleware, async (req, res) => {
   } catch (error) {
     console.error('❌ Erro ao buscar log:', error);
     res.status(500).json({ error: 'Erro ao buscar log' });
+  }
+});
+
+// ========== ROTAS DE LOGS DO GUILD ==========
+
+// Salvar canal de logs
+app.post('/api/guild/logs', authMiddleware, async (req, res) => {
+  try {
+    const { guildId, channelId } = req.body;
+    
+    if (!guildId || !channelId) {
+      return res.status(400).json({ error: 'guildId e channelId são obrigatórios' });
+    }
+
+    await query(
+      `INSERT INTO guild_settings (guild_id, logs_channel_id, updated_at)
+       VALUES ($1, $2, CURRENT_TIMESTAMP)
+       ON CONFLICT (guild_id) DO UPDATE SET logs_channel_id = $2, updated_at = CURRENT_TIMESTAMP`,
+      [guildId, channelId]
+    );
+    
+    res.json({ success: true, message: 'Canal de logs salvo com sucesso' });
+  } catch (error) {
+    console.error('❌ Erro ao salvar canal de logs:', error);
+    res.status(500).json({ error: 'Erro ao salvar canal de logs' });
+  }
+});
+
+// Buscar canal de logs
+app.get('/api/guild/logs/:guildId', authMiddleware, async (req, res) => {
+  try {
+    const { guildId } = req.params;
+    
+    const result = await query(
+      'SELECT logs_channel_id FROM guild_settings WHERE guild_id = $1',
+      [guildId]
+    );
+    
+    res.json(result.rows[0] || null);
+  } catch (error) {
+    console.error('❌ Erro ao buscar canal de logs:', error);
+    res.status(500).json({ error: 'Erro ao buscar canal de logs' });
   }
 });
 
