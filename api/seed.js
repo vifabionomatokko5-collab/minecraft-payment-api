@@ -9,6 +9,48 @@ const pool = new Pool({
 });
 
 const products = [
+  // ========== PRODUTOS DE TESTE (R$ 0,01) ==========
+  { 
+    name: '🧱 1 Terra (TESTE)', 
+    price: 0.01, 
+    command: 'give {username} dirt 1', 
+    category: 'Teste',
+    description: '🧪 Produto de teste - 1 terra por apenas R$ 0,01!',
+    includes: '✅ 1 Terra'
+  },
+  { 
+    name: '🧪 1 Diamante (TESTE)', 
+    price: 0.01, 
+    command: 'give {username} diamond 1', 
+    category: 'Teste',
+    description: '🧪 Produto de teste - 1 diamante por apenas R$ 0,01!',
+    includes: '✅ 1 Diamante'
+  },
+  { 
+    name: '🧪 Kit Iniciante (TESTE)', 
+    price: 0.01, 
+    command: 'kitiniciante {username}', 
+    category: 'Teste',
+    description: '🧪 Produto de teste - Kit Iniciante por apenas R$ 0,01!',
+    includes: '✅ Kit Iniciante Completo'
+  },
+  { 
+    name: '🔑 Chave Comum (TESTE)', 
+    price: 0.01, 
+    command: 'chavescomum {username} 1', 
+    category: 'Teste',
+    description: '🧪 Produto de teste - 1 Chave Comum por apenas R$ 0,01!',
+    includes: '✅ 1 Chave Comum'
+  },
+  { 
+    name: '🎁 Mega Pacote (TESTE)', 
+    price: 0.01, 
+    command: 'megapack {username}', 
+    category: 'Teste',
+    description: '🧪 Produto de teste - Mega Pacote de Chaves por apenas R$ 0,01!',
+    includes: '✅ 10 Chaves Comuns\n✅ 5 Chaves Raras\n✅ 3 Chaves Épicas\n✅ 2 Chaves Superiores'
+  },
+  
   // ========== RANKS ==========
   { 
     name: '🗡️ Rank Knight', 
