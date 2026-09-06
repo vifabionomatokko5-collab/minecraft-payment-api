@@ -105,7 +105,7 @@ app.use(express.json());
       )
     `);
     
-    // Tabela de cupons (COM COMMAND)
+    // Tabela de cupons (criação base)
     await query(`
       CREATE TABLE IF NOT EXISTS coupons (
         id TEXT PRIMARY KEY,
@@ -115,12 +115,21 @@ app.use(express.json());
         min_purchase REAL DEFAULT 0,
         max_uses INTEGER DEFAULT 1,
         used_count INTEGER DEFAULT 0,
-        command TEXT,
         expires_at TIMESTAMP,
         active INTEGER DEFAULT 1,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    
+    // Adicionar coluna command se não existir
+    try {
+      await query(`
+        ALTER TABLE coupons ADD COLUMN IF NOT EXISTS command TEXT
+      `);
+      console.log('✅ Coluna command adicionada (se não existia)');
+    } catch (error) {
+      console.log('ℹ️ Coluna command já existe ou erro ao adicionar:', error.message);
+    }
     
     console.log('📦 Banco de dados inicializado com sucesso!');
     
@@ -241,7 +250,9 @@ app.get('/api/products/:id', async (req, res) => {
   }
 });
 
-// ========== ROTA DE CUPONS (CRIAR) ==========
+// ========== ROTAS DE CUPONS ==========
+
+// Criar cupom
 app.post('/api/coupons', authMiddleware, async (req, res) => {
   try {
     const { code, discount_type, discount_value, min_purchase, max_uses, expires_at, command } = req.body;
@@ -264,94 +275,18 @@ app.post('/api/coupons', authMiddleware, async (req, res) => {
   }
 });
 
-// ========== ROTA DE CUPONS (USAR) ==========
-app.post('/api/coupons/use', authMiddleware, async (req, res) => {
+// Listar cupons
+app.get('/api/coupons', authMiddleware, async (req, res) => {
   try {
-    const { code, username } = req.body;
-    
-    if (!code) {
-      return res.status(400).json({ error: 'Código do cupom é obrigatório' });
-    }
-    
-    // Buscar cupom
-    const result = await query(
-      `SELECT * FROM coupons 
-       WHERE code = $1 
-       AND active = 1 
-       AND (expires_at IS NULL OR expires_at > NOW())
-       AND (max_uses IS NULL OR used_count < max_uses)`,
-      [code.toUpperCase()]
-    );
-    
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Cupom inválido ou expirado' });
-    }
-    
-    const coupon = result.rows[0];
-    
-    // Incrementar uso
-    await query(
-      `UPDATE coupons SET used_count = used_count + 1 WHERE code = $1`,
-      [code.toUpperCase()]
-    );
-    
-    // Executar comando se tiver
-    let commandExecuted = false;
-    if (coupon.command) {
-      try {
-        const command = coupon.command.replace(/{username}/g, username);
-        
-        // Tentar via plugin HTTP
-        try {
-          const axios = require('axios');
-          await axios.post('http://localhost:8080/execute', {
-            username: username,
-            command: command,
-            token: process.env.API_SECRET_TOKEN || 'M1n3P4yM3nt-S3cr3t-T0k3n-2026!'
-          }, {
-            headers: { 'Content-Type': 'application/json' },
-            timeout: 5000
-          });
-          console.log(`✅ Comando do cupom executado: ${command}`);
-          commandExecuted = true;
-        } catch (pluginError) {
-          console.error('❌ Plugin HTTP falhou:', pluginError.message);
-          
-          // Fallback via RCON
-          try {
-            const Rcon = require('rcon-client').Rcon;
-            const rcon = new Rcon({
-              host: process.env.MINECRAFT_HOST || 'localhost',
-              port: parseInt(process.env.RCON_PORT || '25575'),
-              password: process.env.RCON_PASSWORD || 'senha123'
-            });
-            await rcon.connect();
-            await rcon.send(command);
-            await rcon.end();
-            console.log(`✅ Comando via RCON: ${command}`);
-            commandExecuted = true;
-          } catch (rconError) {
-            console.error('❌ RCON falhou:', rconError.message);
-          }
-        }
-      } catch (error) {
-        console.error('❌ Erro ao executar comando do cupom:', error);
-      }
-    }
-    
-    res.json({ 
-      success: true, 
-      message: 'Cupom usado com sucesso',
-      commandExecuted,
-      command: coupon.command
-    });
+    const result = await query('SELECT * FROM coupons ORDER BY created_at DESC');
+    res.json(result.rows);
   } catch (error) {
-    console.error('❌ Erro ao usar cupom:', error);
-    res.status(500).json({ error: 'Erro ao usar cupom' });
+    console.error('❌ Erro ao listar cupons:', error);
+    res.status(500).json({ error: 'Erro ao listar cupons' });
   }
 });
 
-// ========== ROTA DE CUPONS (VALIDAR) ==========
+// Validar cupom
 app.post('/api/coupons/validate', async (req, res) => {
   try {
     const { code, amount } = req.body;
@@ -402,6 +337,88 @@ app.post('/api/coupons/validate', async (req, res) => {
   } catch (error) {
     console.error('❌ Erro ao validar cupom:', error);
     res.status(500).json({ error: 'Erro ao validar cupom' });
+  }
+});
+
+// Usar cupom
+app.post('/api/coupons/use', authMiddleware, async (req, res) => {
+  try {
+    const { code, username } = req.body;
+    
+    if (!code) {
+      return res.status(400).json({ error: 'Código do cupom é obrigatório' });
+    }
+    
+    const result = await query(
+      `SELECT * FROM coupons 
+       WHERE code = $1 
+       AND active = 1 
+       AND (expires_at IS NULL OR expires_at > NOW())
+       AND (max_uses IS NULL OR used_count < max_uses)`,
+      [code.toUpperCase()]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Cupom inválido ou expirado' });
+    }
+    
+    const coupon = result.rows[0];
+    
+    await query(
+      `UPDATE coupons SET used_count = used_count + 1 WHERE code = $1`,
+      [code.toUpperCase()]
+    );
+    
+    let commandExecuted = false;
+    if (coupon.command) {
+      try {
+        const command = coupon.command.replace(/{username}/g, username);
+        
+        try {
+          const axios = require('axios');
+          await axios.post('http://localhost:8080/execute', {
+            username: username,
+            command: command,
+            token: process.env.API_SECRET_TOKEN || 'M1n3P4yM3nt-S3cr3t-T0k3n-2026!'
+          }, {
+            headers: { 'Content-Type': 'application/json' },
+            timeout: 5000
+          });
+          console.log(`✅ Comando do cupom executado: ${command}`);
+          commandExecuted = true;
+        } catch (pluginError) {
+          console.error('❌ Plugin HTTP falhou:', pluginError.message);
+          
+          try {
+            const Rcon = require('rcon-client').Rcon;
+            const rcon = new Rcon({
+              host: process.env.MINECRAFT_HOST || 'localhost',
+              port: parseInt(process.env.RCON_PORT || '25575'),
+              password: process.env.RCON_PASSWORD || 'senha123'
+            });
+            await rcon.connect();
+            await rcon.send(command);
+            await rcon.end();
+            console.log(`✅ Comando via RCON: ${command}`);
+            commandExecuted = true;
+          } catch (rconError) {
+            console.error('❌ RCON falhou:', rconError.message);
+          }
+        }
+      } catch (error) {
+        console.error('❌ Erro ao executar comando do cupom:', error);
+      }
+    }
+    
+    res.json({ 
+      success: true, 
+      message: 'Cupom usado com sucesso',
+      commandExecuted,
+      command: coupon.command
+    });
+  } catch (error) {
+    console.error('❌ Erro ao usar cupom:', error);
+    res.status(500).json({ error: 'Erro ao usar cupom' });
   }
 });
 
