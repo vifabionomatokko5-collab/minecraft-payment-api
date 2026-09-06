@@ -36,12 +36,17 @@
                     <span class="category-tag"><%= product.category || 'Outros' %></span>
                     <h3><%= product.name %></h3>
                     <p class="price">R$ <%= product.price.toFixed(2) %></p>
-                    <button class="btn-cart" onclick="addToCart('<%= product.id %>', '<%= product.name %>', <%= product.price %>)">
-                        🛒 Adicionar
-                    </button>
-                    <button class="btn-buy" onclick="buyNow('<%= product.id %>')">
-                        Comprar
-                    </button>
+                    <% if (product.description) { %>
+                        <p class="description" style="font-size:0.85rem;color:#aaa;margin:8px 0;min-height:40px;"><%= product.description %></p>
+                    <% } %>
+                    <div style="display:flex;gap:5px;justify-content:center;flex-wrap:wrap;margin-top:10px;">
+                        <button class="btn-cart" onclick="addToCart('<%= product.id %>', '<%= product.name %>', <%= product.price %>)">
+                            🛒 Adicionar
+                        </button>
+                        <button class="btn-buy" onclick="buyNow('<%= product.id %>')">
+                            Comprar
+                        </button>
+                    </div>
                 </div>
             <% }) %>
         </div>
@@ -163,7 +168,6 @@
                 alert('Seu carrinho está vazio!');
                 return;
             }
-            // Redirecionar para checkout com os itens do carrinho
             const items = cart.map(item => `${item.id}:${item.qty}`).join(',');
             window.location.href = `/checkout?items=${encodeURIComponent(items)}`;
         }
@@ -183,7 +187,6 @@
             setTimeout(() => notif.remove(), 3000);
         }
 
-        // CSS da animação
         const style = document.createElement('style');
         style.textContent = `
             @keyframes slideIn {
@@ -193,7 +196,6 @@
         `;
         document.head.appendChild(style);
 
-        // Inicializar carrinho
         updateCartUI();
     </script>
 </body>
