@@ -3,200 +3,188 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Miragem Store</title>
+    <title>ZORION CRAFT</title>
     <link rel="stylesheet" href="/css/style.css">
+
+    <style>
+        body{background:#080d2b}
+        header{background:#080d2b;border-bottom:1px solid #16466d}
+        header h1 span{color:#25cfff;text-shadow:0 0 12px #25cfff}
+        .category-btn{background:#0c1435;color:#b8d9ed;border:1px solid #16466d}
+        .category-btn.active,.category-btn:hover{background:#087fc9;color:#fff;border-color:#25cfff}
+        .product-card{background:#0b1231;border-color:#16466d}
+        .product-card:hover{border-color:#25cfff;box-shadow:0 0 20px #087fc955}
+        .price{color:#25cfff}
+        .btn-buy{background:#087fc9}
+        .btn-cart{background:#101a3d;color:#25cfff;border:1px solid #16466d}
+    </style>
 </head>
+
 <body>
-    <header>
-        <h1>🏪 <span>Miragem</span> Store</h1>
-        <div class="header-right">
-            <button class="cart-btn" onclick="toggleCart()">
-                🛒 Carrinho
-                <span class="cart-count" id="cart-count">0</span>
-            </button>
-        </div>
-    </header>
 
-    <main>
-        <!-- Categorias -->
-        <div class="categories" id="categories">
-            <button class="category-btn active" data-category="all">Todos</button>
-            <button class="category-btn" data-category="Ranks">👑 Ranks</button>
-            <button class="category-btn" data-category="Recursos">💎 Recursos</button>
-            <button class="category-btn" data-category="Equipamentos">⚔️ Equipamentos</button>
-            <button class="category-btn" data-category="Kits">📦 Kits</button>
-            <button class="category-btn" data-category="Chaves">🔑 Chaves</button>
-            <button class="category-btn" data-category="Pacotes">🎁 Pacotes</button>
-        </div>
+<header>
+    <h1>♛ <span>ZORION</span> CRAFT</h1>
+    <div class="header-right">
+        <button class="cart-btn" onclick="toggleCart()">
+            🛒 Carrinho <span class="cart-count" id="cart-count">0</span>
+        </button>
+    </div>
+</header>
 
-        <!-- Produtos -->
-        <div class="products-grid" id="products-grid">
-            <% products.forEach(product => { %>
-                <div class="product-card" data-category="<%= product.category || 'Outros' %>">
-                    <span class="category-tag"><%= product.category || 'Outros' %></span>
-                    <h3><%= product.name %></h3>
-                    <p class="price">R$ <%= product.price.toFixed(2) %></p>
-                    <% if (product.description) { %>
-                        <p class="description" style="font-size:0.85rem;color:#aaa;margin:8px 0;min-height:40px;"><%= product.description %></p>
-                    <% } %>
-                    <div style="display:flex;gap:5px;justify-content:center;flex-wrap:wrap;margin-top:10px;">
-                        <button class="btn-cart" onclick="addToCart('<%= product.id %>', '<%= product.name %>', <%= product.price %>)">
-                            🛒 Adicionar
-                        </button>
-                        <button class="btn-buy" onclick="buyNow('<%= product.id %>')">
-                            Comprar
-                        </button>
-                    </div>
-                </div>
-            <% }) %>
-        </div>
-    </main>
-
-    <!-- Overlay do Carrinho -->
-    <div class="cart-overlay" id="cart-overlay" onclick="toggleCart()"></div>
-
-    <!-- Painel do Carrinho -->
-    <div class="cart-panel" id="cart-panel">
-        <button class="close-cart" onclick="toggleCart()">✕</button>
-        <h2>🛒 Carrinho</h2>
-        <div id="cart-items"></div>
-        <div class="cart-total">
-            <p>Total: <span class="total-price" id="cart-total">R$ 0.00</span></p>
-            <button class="btn-checkout" onclick="checkout()">Finalizar Compra</button>
-        </div>
+<main>
+    <div class="categories" id="categories">
+        <button class="category-btn active" data-category="all">Todos</button>
+        <button class="category-btn" data-category="Ranks">👑 VIPs</button>
     </div>
 
-    <script>
-        // ========== CARRINHO ==========
-        let cart = [];
+    <div class="products-grid" id="products-grid">
+        <% products.forEach(product => { %>
+            <div class="product-card" data-category="<%= product.category || 'Outros' %>">
+                <span class="category-tag"><%= product.category || 'Outros' %></span>
+                <h3><%= product.name %></h3>
+                <p class="price">R$ <%= product.price.toFixed(2) %></p>
 
-        function toggleCart() {
-            document.getElementById('cart-overlay').classList.toggle('active');
-            document.getElementById('cart-panel').classList.toggle('active');
-            updateCartUI();
-        }
+                <% if (product.description) { %>
+                    <p class="description"><%= product.description %></p>
+                <% } %>
 
-        function addToCart(id, name, price) {
-            const existing = cart.find(item => item.id === id);
-            if (existing) {
-                existing.qty++;
-            } else {
-                cart.push({ id, name, price, qty: 1 });
-            }
-            updateCartUI();
-            showNotification(`✅ ${name} adicionado ao carrinho!`);
-        }
+                <div style="display:flex;gap:6px;justify-content:center;margin-top:10px">
+                    <button class="btn-cart"
+                        onclick="addToCart('<%= product.id %>','<%= product.name %>',<%= product.price %>)">
+                        🛒 Adicionar
+                    </button>
 
-        function removeFromCart(id) {
-            cart = cart.filter(item => item.id !== id);
-            updateCartUI();
-        }
+                    <button class="btn-buy" onclick="buyNow('<%= product.id %>')">
+                        Comprar
+                    </button>
+                </div>
+            </div>
+        <% }) %>
+    </div>
+</main>
 
-        function updateQty(id, delta) {
-            const item = cart.find(i => i.id === id);
-            if (item) {
-                item.qty += delta;
-                if (item.qty <= 0) {
-                    removeFromCart(id);
-                }
-                updateCartUI();
-            }
-        }
+<div class="cart-overlay" id="cart-overlay" onclick="toggleCart()"></div>
 
-        function updateCartUI() {
-            const cartItems = document.getElementById('cart-items');
-            const cartTotal = document.getElementById('cart-total');
-            const cartCount = document.getElementById('cart-count');
+<div class="cart-panel" id="cart-panel">
+    <button class="close-cart" onclick="toggleCart()">✕</button>
+    <h2>🛒 Carrinho</h2>
+    <div id="cart-items"></div>
 
-            let total = 0;
-            let count = 0;
+    <div class="cart-total">
+        <p>Total: <span class="total-price" id="cart-total">R$ 0.00</span></p>
+        <button class="btn-checkout" onclick="checkout()">Finalizar Compra</button>
+    </div>
+</div>
 
-            if (cart.length === 0) {
-                cartItems.innerHTML = '<p style="color:#666;text-align:center;">Carrinho vazio</p>';
-                cartTotal.textContent = 'R$ 0.00';
-                cartCount.textContent = '0';
-                return;
-            }
+<script>
+let cart=[];
 
-            cartItems.innerHTML = cart.map(item => {
-                total += item.price * item.qty;
-                count += item.qty;
-                return `
-                    <div class="cart-item">
-                        <div class="item-info">
-                            <div class="item-name">${item.name}</div>
-                            <div class="item-price">R$ ${(item.price * item.qty).toFixed(2)}</div>
-                        </div>
-                        <div class="item-qty">
-                            <button onclick="updateQty('${item.id}', -1)">-</button>
-                            <span>${item.qty}</span>
-                            <button onclick="updateQty('${item.id}', 1)">+</button>
-                        </div>
-                        <button class="remove-item" onclick="removeFromCart('${item.id}')">✕</button>
-                    </div>
-                `;
-            }).join('');
+function toggleCart(){
+    document.getElementById('cart-overlay').classList.toggle('active');
+    document.getElementById('cart-panel').classList.toggle('active');
+    updateCartUI();
+}
 
-            cartTotal.textContent = `R$ ${total.toFixed(2)}`;
-            cartCount.textContent = count;
-        }
+function addToCart(id,name,price){
+    const item=cart.find(i=>i.id===id);
+    item ? item.qty++ : cart.push({id,name,price,qty:1});
+    updateCartUI();
+    showNotification(`✅ ${name} adicionado ao carrinho!`);
+}
 
-        // ========== CATEGORIAS ==========
-        document.querySelectorAll('.category-btn').forEach(btn => {
-            btn.addEventListener('click', function() {
-                document.querySelectorAll('.category-btn').forEach(b => b.classList.remove('active'));
-                this.classList.add('active');
-                
-                const category = this.dataset.category;
-                document.querySelectorAll('.product-card').forEach(card => {
-                    if (category === 'all' || card.dataset.category === category) {
-                        card.style.display = 'block';
-                    } else {
-                        card.style.display = 'none';
-                    }
-                });
-            });
+function removeFromCart(id){
+    cart=cart.filter(i=>i.id!==id);
+    updateCartUI();
+}
+
+function updateQty(id,delta){
+    const item=cart.find(i=>i.id===id);
+    if(!item)return;
+    item.qty+=delta;
+    if(item.qty<=0)return removeFromCart(id);
+    updateCartUI();
+}
+
+function updateCartUI(){
+    const items=document.getElementById('cart-items');
+    let total=0,count=0;
+
+    if(!cart.length){
+        items.innerHTML='<p style="color:#666;text-align:center">Carrinho vazio</p>';
+        document.getElementById('cart-total').textContent='R$ 0.00';
+        document.getElementById('cart-count').textContent='0';
+        return;
+    }
+
+    items.innerHTML=cart.map(i=>{
+        total+=i.price*i.qty;
+        count+=i.qty;
+
+        return `
+        <div class="cart-item">
+            <div class="item-info">
+                <div class="item-name">${i.name}</div>
+                <div class="item-price">R$ ${(i.price*i.qty).toFixed(2)}</div>
+            </div>
+            <div class="item-qty">
+                <button onclick="updateQty('${i.id}',-1)">-</button>
+                <span>${i.qty}</span>
+                <button onclick="updateQty('${i.id}',1)">+</button>
+            </div>
+            <button class="remove-item" onclick="removeFromCart('${i.id}')">✕</button>
+        </div>`;
+    }).join('');
+
+    document.getElementById('cart-total').textContent=`R$ ${total.toFixed(2)}`;
+    document.getElementById('cart-count').textContent=count;
+}
+
+document.querySelectorAll('.category-btn').forEach(btn=>{
+    btn.onclick=function(){
+        document.querySelectorAll('.category-btn').forEach(b=>b.classList.remove('active'));
+        this.classList.add('active');
+
+        const category=this.dataset.category;
+
+        document.querySelectorAll('.product-card').forEach(card=>{
+            card.style.display=category==='all'||card.dataset.category===category?'block':'none';
         });
+    };
+});
 
-        // ========== COMPRAR ==========
-        function buyNow(productId) {
-            window.location.href = `/comprar/${productId}`;
-        }
+function buyNow(id){
+    window.location.href=`/comprar/${id}`;
+}
 
-        function checkout() {
-            if (cart.length === 0) {
-                alert('Seu carrinho está vazio!');
-                return;
-            }
-            const items = cart.map(item => `${item.id}:${item.qty}`).join(',');
-            window.location.href = `/checkout?items=${encodeURIComponent(items)}`;
-        }
+function checkout(){
+    if(!cart.length)return alert('Seu carrinho está vazio!');
 
-        // ========== NOTIFICAÇÃO ==========
-        function showNotification(message) {
-            const notif = document.createElement('div');
-            notif.style.cssText = `
-                position: fixed; bottom: 20px; right: 20px;
-                background: #00ff88; color: #1a1a2e;
-                padding: 15px 25px; border-radius: 8px;
-                font-weight: bold; z-index: 1001;
-                animation: slideIn 0.3s ease;
-            `;
-            notif.textContent = message;
-            document.body.appendChild(notif);
-            setTimeout(() => notif.remove(), 3000);
-        }
+    const items=cart.map(i=>`${i.id}:${i.qty}`).join(',');
+    window.location.href=`/checkout?items=${encodeURIComponent(items)}`;
+}
 
-        const style = document.createElement('style');
-        style.textContent = `
-            @keyframes slideIn {
-                from { transform: translateX(100%); opacity: 0; }
-                to { transform: translateX(0); opacity: 1; }
-            }
-        `;
-        document.head.appendChild(style);
+function showNotification(message){
+    const n=document.createElement('div');
 
-        updateCartUI();
-    </script>
+    n.style.cssText=`
+        position:fixed;
+        bottom:20px;
+        right:20px;
+        background:#087fc9;
+        color:white;
+        padding:15px 20px;
+        border-radius:8px;
+        font-weight:bold;
+        z-index:1001;
+    `;
+
+    n.textContent=message;
+    document.body.appendChild(n);
+    setTimeout(()=>n.remove(),3000);
+}
+
+updateCartUI();
+</script>
+
 </body>
 </html>
