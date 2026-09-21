@@ -10,45 +10,84 @@ const pool = new Pool({
 });
 
 const products = [
+  // =========================
+  // 💎 VIPs — 30 DIAS
+  // =========================
   {
-    name: '⭐ VIP',
+    name: '🟢 VIP',
     price: 5.90,
-    command: 'vip {username} vip',
+    command: 'lp user {username} parent addtemp vip 30d',
     category: 'Ranks',
-    description: 'Torne-se VIP e tenha acesso a benefícios exclusivos no servidor!',
+    description: 'Torne-se VIP por 30 dias e tenha acesso a benefícios exclusivos no servidor!',
     includes: '✅ Prefixo VIP\n✅ 5 Homes\n✅ Kit VIP\n✅ /nick\n✅ /back\n✅ /recipe\n✅ /feed\n✅ /disposal'
   },
   {
-    name: '💎 VIP+',
+    name: '💚 VIP+',
     price: 9.90,
-    command: 'vip {username} vip+',
+    command: 'lp user {username} parent addtemp vip+ 30d',
     category: 'Ranks',
-    description: 'Evolua para VIP+ e desbloqueie ainda mais benefícios!',
+    description: 'Evolua para VIP+ por 30 dias e desbloqueie ainda mais benefícios!',
     includes: '✅ Prefixo VIP+\n✅ 10 Homes\n✅ Kit VIP+\n✅ /nick\n✅ /back\n✅ /recipe\n✅ /feed\n✅ /disposal\n✅ /craft\n✅ /near'
   },
   {
-    name: '🔥 MVP',
+    name: '💜 MVP',
     price: 14.90,
-    command: 'vip {username} mvp',
+    command: 'lp user {username} parent addtemp mvp 30d',
     category: 'Ranks',
-    description: 'Torne-se MVP e aproveite uma experiência ainda mais completa!',
+    description: 'Torne-se MVP por 30 dias e aproveite uma experiência ainda mais completa!',
     includes: '✅ Prefixo MVP\n✅ Homes Ilimitados\n✅ Kit MVP\n✅ /nick\n✅ /back\n✅ /recipe\n✅ /feed\n✅ /disposal\n✅ /craft\n✅ /near\n✅ /enderchest'
   },
   {
-    name: '👑 MVP+',
+    name: '💎 MVP+',
     price: 20.90,
-    command: 'vip {username} mvp+',
+    command: 'lp user {username} parent addtemp mvp+ 30d',
     category: 'Ranks',
-    description: 'Alcance o MVP+ e tenha acesso ao nível máximo de benefícios!',
+    description: 'Alcance o MVP+ por 30 dias e tenha acesso ao nível máximo de benefícios!',
     includes: '✅ Prefixo MVP+\n✅ Homes Ilimitados\n✅ Kit MVP+\n✅ /nick\n✅ /back\n✅ /recipe\n✅ /feed\n✅ /disposal\n✅ /craft\n✅ /near\n✅ /enderchest\n✅ /ptime\n✅ /repair\n✅ /fly'
   },
+
+  // =========================
+  // 🪙 CASH
+  // =========================
   {
-    name: '🧪 Item de Teste',
-    price: 0.01,
-    command: 'give {username} dirt 1',
-    category: 'Teste',
-    description: 'Produto de teste para verificar a entrega automática.',
-    includes: '✅ 1 Terra'
+    name: '🪙 50 Cash',
+    price: 4.99,
+    command: 'playerpoints:p give {username} 50',
+    category: 'Cash',
+    description: 'Receba 50 Cash para utilizar na loja e nos sistemas do servidor.',
+    includes: '🪙 50 Cash'
+  },
+  {
+    name: '💰 100 Cash',
+    price: 9.99,
+    command: 'playerpoints:p give {username} 100',
+    category: 'Cash',
+    description: 'Receba 100 Cash para utilizar na loja e nos sistemas do servidor.',
+    includes: '💰 100 Cash'
+  },
+  {
+    name: '💰 300 Cash',
+    price: 29.99,
+    command: 'playerpoints:p give {username} 300',
+    category: 'Cash',
+    description: 'Receba 300 Cash para utilizar na loja e nos sistemas do servidor.',
+    includes: '💰 300 Cash'
+  },
+  {
+    name: '🧰 500 Cash',
+    price: 49.99,
+    command: 'playerpoints:p give {username} 500',
+    category: 'Cash',
+    description: 'Receba 500 Cash para utilizar na loja e nos sistemas do servidor.',
+    includes: '🧰 500 Cash'
+  },
+  {
+    name: '👑 1.000 Cash',
+    price: 99.99,
+    command: 'playerpoints:p give {username} 1000',
+    category: 'Cash',
+    description: 'Receba 1.000 Cash para utilizar na loja e nos sistemas do servidor.',
+    includes: '👑 1.000 Cash'
   }
 ];
 
