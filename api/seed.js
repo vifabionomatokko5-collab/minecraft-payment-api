@@ -41,6 +41,14 @@ const products = [
     category: 'Ranks',
     description: 'Alcance o MVP+ e tenha acesso ao nível máximo de benefícios!',
     includes: '✅ Prefixo MVP+\n✅ Homes Ilimitados\n✅ Kit MVP+\n✅ /nick\n✅ /back\n✅ /recipe\n✅ /feed\n✅ /disposal\n✅ /craft\n✅ /near\n✅ /enderchest\n✅ /ptime\n✅ /repair\n✅ /fly'
+  },
+  {
+    name: '🧪 Item de Teste',
+    price: 0.01,
+    command: 'give {username} dirt 1',
+    category: 'Teste',
+    description: 'Produto de teste para verificar a entrega automática.',
+    includes: '✅ 1 Terra'
   }
 ];
 
@@ -87,7 +95,7 @@ async function seedProducts() {
       }
     }
 
-    console.log(`🎉 Sincronização concluída! ${added} VIPs adicionados.`);
+    console.log(`🎉 Sincronização concluída! ${added} produtos adicionados.`);
 
   } catch (error) {
     console.error('❌ Erro na sincronização:', error);
